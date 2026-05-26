@@ -1,0 +1,15 @@
+[project]
+name = "apartment-hunter"
+version = "0.1.0"
+description = "Vancouver rental listing scraper, scorer, and alerter."
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+apartment_hunter = ["templates/*.html"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

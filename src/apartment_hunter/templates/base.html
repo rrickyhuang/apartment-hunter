@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Apartment Hunter{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    .status-pill { @apply text-xs font-medium px-2 py-0.5 rounded-full; }
+    .status-new       { background:#e5e7eb; color:#374151; }
+    .status-interested{ background:#dbeafe; color:#1d4ed8; }
+    .status-contacted { background:#fef3c7; color:#92400e; }
+    .status-viewing   { background:#fde68a; color:#78350f; }
+    .status-applied   { background:#c7d2fe; color:#3730a3; }
+    .status-accepted  { background:#d1fae5; color:#065f46; }
+    .status-rejected  { background:#fee2e2; color:#991b1b; }
+    .status-archived  { background:#f3f4f6; color:#6b7280; opacity:0.7; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <header class="bg-white border-b sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="text-lg font-semibold">🏠 Apartment Hunter</a>
+      <nav class="text-sm text-slate-500">Vancouver rentals</nav>
+    </div>
+  </header>
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

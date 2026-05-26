@@ -1,0 +1,42 @@
+# Edit freely. Reloaded each run — no restart needed.
+
+hard_filters:
+  max_rent: 2000
+  min_beds: 0                          # 0 = studios allowed
+  cities:
+    - Vancouver
+    - Burnaby
+    - New Westminster
+    - Richmond
+    - North Vancouver
+    - West Vancouver
+  deal_breakers: []                    # e.g. ["shared bathroom", "basement"]
+
+# Weights must sum to 1.0
+weights:
+  price: 0.45
+  location: 0.25
+  size: 0.15
+  amenities: 0.15
+
+preferences:
+  target_rent: 1700                    # rents <= this get full price score
+  preferred_neighborhoods:
+    - Mount Pleasant
+    - Kitsilano
+    - Commercial Drive
+    - Yaletown
+    - Downtown
+    - Gastown
+    - Olympic Village
+  min_sqft: 400
+  target_sqft: 700                     # sqft >= this gets full size score
+  nice_to_have:
+    - in_unit_laundry
+    - dishwasher
+    - balcony
+    - gym
+    - parking
+    - heat_included
+
+alert_threshold: 70                    # 0-100 — emails sent at or above this

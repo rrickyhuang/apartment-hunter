@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python.exe -m pip install --quiet \"curl_cffi>=0.7\")",
+      "Bash(.venv/Scripts/python.exe -m pytest -q)",
+      "Bash(rm -f data/listings.db)",
+      "Bash(.venv/Scripts/python.exe -m apartment_hunter.run --once --dry-run)",
+      "Bash(.venv/Scripts/python.exe)",
+      "Bash(.venv/Scripts/python.exe -m pip install --quiet -e .)",
+      "Bash(.venv/Scripts/python.exe -m apartment_hunter.web --port 5050)",
+      "Bash(netstat -ano)",
+      "Bash(git add *)"
+    ]
+  }
+}
