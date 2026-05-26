@@ -1,7 +1,9 @@
 # Edit freely. Reloaded each run — no restart needed.
+# You can also edit this from the UI at http://127.0.0.1:5000/config
 
 hard_filters:
   max_rent: 2000
+  min_rent: 500                        # drops obvious scams / per-week prices
   min_beds: 0                          # 0 = studios allowed
   cities:
     - Vancouver
@@ -11,6 +13,11 @@ hard_filters:
     - North Vancouver
     - West Vancouver
   deal_breakers: []                    # e.g. ["shared bathroom", "basement"]
+  sources:                             # toggle individual scrapers
+    rentals_ca: true
+    rentfaster: true
+    kijiji: true
+    craigslist: false                  # off by default — too noisy
 
 # Weights must sum to 1.0
 weights:

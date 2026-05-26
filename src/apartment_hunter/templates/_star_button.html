@@ -1,0 +1,10 @@
+<button
+  type="button"
+  hx-post="/listing/{{ row.source }}/{{ row.external_id }}/star"
+  hx-target="this"
+  hx-swap="outerHTML"
+  title="{% if row.starred %}Unstar{% else %}Star this listing{% endif %}"
+  class="absolute top-2 left-2 w-8 h-8 flex items-center justify-center rounded-full
+         bg-white/90 hover:bg-white shadow text-lg leading-none
+         {% if row.starred %}text-amber-500{% else %}text-slate-400 hover:text-amber-500{% endif %}"
+>{% if row.starred %}★{% else %}☆{% endif %}</button>

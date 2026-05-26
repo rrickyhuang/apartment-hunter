@@ -1,0 +1,13 @@
+<select
+  name="status"
+  hx-post="/listing/{{ row.source }}/{{ row.external_id }}/quick_status"
+  hx-trigger="change"
+  hx-target="this"
+  hx-swap="outerHTML"
+  onclick="event.stopPropagation(); event.preventDefault();"
+  class="status-pill status-{{ row.status }} border-0 cursor-pointer pr-6 appearance-none"
+>
+  {% for s in statuses %}
+    <option value="{{ s }}" {% if s==row.status %}selected{% endif %}>{{ s }}</option>
+  {% endfor %}
+</select>

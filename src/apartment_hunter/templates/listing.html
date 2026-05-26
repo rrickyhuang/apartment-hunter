@@ -17,7 +17,9 @@
 
     <div class="bg-white border rounded-lg p-5">
       <div class="flex items-baseline justify-between gap-4 flex-wrap">
-        <h1 class="text-2xl font-semibold">{{ row.title }}</h1>
+        <h1 class="text-2xl font-semibold">
+          {% if row.starred %}<span class="text-amber-500">★</span> {% endif %}{{ row.title }}
+        </h1>
         {% if row.score is not none %}
           <span class="bg-slate-900 text-white text-sm font-bold px-3 py-1 rounded">
             score {{ row.score|num }}

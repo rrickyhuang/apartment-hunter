@@ -8,16 +8,144 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import threading
+import time
 from pathlib import Path
 
-from flask import Flask, abort, render_template, request
+import yaml
+from flask import Flask, abort, make_response, redirect, render_template, request, url_for
 
 from . import db
+from .scoring import Criteria, passes_hard_filters, score
 
 log = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB = PROJECT_ROOT / "data" / "listings.db"
+CRITERIA_PATH = PROJECT_ROOT / "config" / "criteria.yaml"
+
+# Fields the form posts. Keep in sync with config.html.
+KNOWN_SOURCES = ["rentals_ca", "rentfaster", "kijiji", "craigslist"]
+WEIGHT_KEYS = ["price", "location", "size", "amenities"]
+
+
+def _load_criteria_yaml() -> dict:
+    with open(CRITERIA_PATH, encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def _save_criteria_yaml(data: dict) -> None:
+    with open(CRITERIA_PATH, "w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+
+
+def _csv_list(s: str) -> list[str]:
+    """Split a 'a, b, c\\nd' string into a clean list."""
+    if not s:
+        return []
+    parts = []
+    for chunk in s.replace("\n", ",").split(","):
+        chunk = chunk.strip()
+        if chunk:
+            parts.append(chunk)
+    return parts
+
+
+class _RowAsListing:
+    """Minimal adapter so scoring.score() can read a sqlite Row without pydantic."""
+    __slots__ = ("price", "beds", "sqft", "title", "description", "address",
+                 "city", "amenities")
+
+    def __init__(self, row, amenities_list):
+        self.price = row["price"]
+        self.beds = row["beds"]
+        self.sqft = row["sqft"]
+        self.title = row["title"]
+        self.description = row["description"]
+        self.address = row["address"]
+        self.city = row["city"]
+        self.amenities = amenities_list
+
+
+# --- Scrape-on-demand state ---------------------------------------------------
+# A single background scrape may run at a time. The UI polls /scrape/status to
+# render the button's current state.
+_scrape_state = {
+    "running": False,
+    "started_at": None,    # epoch seconds when scrape began
+    "finished_at": None,   # epoch seconds when last scrape ended
+    "new_count": None,     # how many new listings the last scrape inserted
+    "error": None,         # last error message if any
+    "refresh_pending": False,  # consumed once by /scrape/status to trigger HX-Refresh
+}
+_scrape_lock = threading.Lock()
+
+
+def _run_scrape_thread(db_path: str) -> None:
+    """Runs the full scraper pipeline in dry-run mode (no email). Updates
+    _scrape_state so /scrape/status can report progress."""
+    # Import locally to avoid pulling scraper deps into the web import path
+    # before someone hits the button.
+    from .run import main as run_main
+
+    # The /scrape route flipped `running` to True synchronously already, so we
+    # only need the pre-count here.
+    try:
+        conn = db.connect(db_path)
+        before = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
+    except Exception:
+        before = None
+
+    try:
+        run_main(["--once", "--dry-run", "--db", db_path])
+    except SystemExit:
+        # run_main calls sys.exit when not via __main__; ignore here
+        pass
+    except Exception as e:
+        with _scrape_lock:
+            _scrape_state["error"] = str(e)
+
+    try:
+        conn = db.connect(db_path)
+        after = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
+    except Exception:
+        after = None
+
+    with _scrape_lock:
+        _scrape_state["running"] = False
+        _scrape_state["finished_at"] = time.time()
+        _scrape_state["refresh_pending"] = True
+        if before is not None and after is not None:
+            _scrape_state["new_count"] = max(0, after - before)
+
+
+def _scrape_view_state() -> dict:
+    """Snapshot of _scrape_state for templates (incl. derived fields)."""
+    with _scrape_lock:
+        s = dict(_scrape_state)
+    now = time.time()
+    s["elapsed"] = int(now - s["started_at"]) if s["started_at"] else None
+    s["just_finished"] = (
+        not s["running"]
+        and s["finished_at"] is not None
+        and (now - s["finished_at"]) < 4
+    )
+    return s
+
+
+def _rescore_all(conn, criteria: Criteria) -> int:
+    """Re-score every listing in the DB against `criteria`. Returns count."""
+    rows = db.all_listings(conn)
+    for r in rows:
+        try:
+            amens = json.loads(r["amenities"]) if r["amenities"] else []
+        except Exception:
+            amens = []
+        adapter = _RowAsListing(r, amens)
+        ok, _ = passes_hard_filters(adapter, criteria)
+        s = score(adapter, criteria)["total"] if ok else 0.0
+        db.set_score(conn, r["source"], r["external_id"], s)
+    return len(rows)
 
 
 def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
@@ -57,6 +185,7 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
         source_filter = request.args.getlist("source")
         sort = request.args.get("sort", "score_desc")
         show_hidden = request.args.get("hidden") == "1"
+        starred_only = request.args.get("starred") == "1"
         search = request.args.get("q", "").strip() or None
         try:
             min_score = float(request.args.get("min_score", "0") or 0)
@@ -79,6 +208,7 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
             max_price=max_price,
             min_beds=min_beds,
             show_hidden=show_hidden,
+            starred_only=starred_only,
             search=search,
             sort=sort,
         )
@@ -92,6 +222,7 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
             source_filter=source_filter,
             sort=sort,
             show_hidden=show_hidden,
+            starred_only=starred_only,
             search=search or "",
             min_score=min_score,
             max_price=max_price or "",
@@ -122,6 +253,130 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
         conn = get_conn()
         db.set_notes(conn, source, external_id, request.form.get("notes", ""))
         return '<span class="text-xs text-emerald-600">saved</span>'
+
+    @app.route("/listing/<source>/<external_id>/star", methods=["POST"])
+    def toggle_star(source, external_id):
+        conn = get_conn()
+        row = db.get_one(conn, source, external_id)
+        if not row:
+            abort(404)
+        db.set_starred(conn, source, external_id, not bool(row["starred"]))
+        row = db.get_one(conn, source, external_id)
+        return render_template("_star_button.html", row=row)
+
+    @app.route("/listing/<source>/<external_id>/quick_status", methods=["POST"])
+    def quick_status(source, external_id):
+        """Used by inline card dropdown. Returns just the visible status pill."""
+        conn = get_conn()
+        status = request.form.get("status", "new")
+        try:
+            db.set_status(conn, source, external_id, status)
+        except ValueError:
+            abort(400)
+        row = db.get_one(conn, source, external_id)
+        return render_template("_card_status.html", row=row, statuses=db.STATUSES)
+
+    @app.context_processor
+    def inject_scrape_state():
+        return {"scrape_state": _scrape_view_state()}
+
+    @app.route("/scrape", methods=["POST"])
+    def scrape_start():
+        """Kick off a background scrape if one isn't already running."""
+        started = False
+        with _scrape_lock:
+            if not _scrape_state["running"]:
+                # Flip the flag synchronously so the rendered response shows
+                # the "Scraping…" pill immediately (no race with the thread).
+                _scrape_state["running"] = True
+                _scrape_state["started_at"] = time.time()
+                _scrape_state["error"] = None
+                _scrape_state["refresh_pending"] = False
+                started = True
+        if started:
+            threading.Thread(
+                target=_run_scrape_thread,
+                args=(app.config["DB_PATH"],),
+                daemon=True,
+            ).start()
+        return render_template("_scrape_button.html", scrape_state=_scrape_view_state())
+
+    @app.route("/scrape/status", methods=["GET"])
+    def scrape_status():
+        state = _scrape_view_state()
+        # Consume the refresh_pending flag — fires HX-Refresh exactly once,
+        # which then reloads the page with fresh listings.
+        should_refresh = False
+        with _scrape_lock:
+            if _scrape_state["refresh_pending"]:
+                _scrape_state["refresh_pending"] = False
+                should_refresh = True
+        resp = make_response(render_template("_scrape_button.html", scrape_state=state))
+        if should_refresh:
+            resp.headers["HX-Refresh"] = "true"
+        return resp
+
+    @app.route("/config", methods=["GET"])
+    def config_view():
+        cfg = _load_criteria_yaml()
+        return render_template(
+            "config.html",
+            cfg=cfg,
+            known_sources=KNOWN_SOURCES,
+            saved=request.args.get("saved") == "1",
+            rescored=request.args.get("rescored"),
+            error=None,
+        )
+
+    @app.route("/config", methods=["POST"])
+    def config_save():
+        f = request.form
+        try:
+            new_cfg = {
+                "hard_filters": {
+                    "max_rent": int(f.get("max_rent") or 0),
+                    "min_rent": int(f.get("min_rent") or 0),
+                    "min_beds": float(f.get("min_beds") or 0),
+                    "cities": _csv_list(f.get("cities", "")),
+                    "deal_breakers": _csv_list(f.get("deal_breakers", "")),
+                    "sources": {
+                        src: f.get(f"src_{src}") == "on" for src in KNOWN_SOURCES
+                    },
+                },
+                "weights": {k: float(f.get(f"w_{k}") or 0) for k in WEIGHT_KEYS},
+                "preferences": {
+                    "target_rent": int(f.get("target_rent") or 0),
+                    "preferred_neighborhoods": _csv_list(f.get("preferred_neighborhoods", "")),
+                    "min_sqft": int(f.get("min_sqft") or 0),
+                    "target_sqft": int(f.get("target_sqft") or 0),
+                    "nice_to_have": _csv_list(f.get("nice_to_have", "")),
+                },
+                "alert_threshold": float(f.get("alert_threshold") or 0),
+            }
+        except ValueError as e:
+            return render_template(
+                "config.html", cfg=_load_criteria_yaml(),
+                known_sources=KNOWN_SOURCES, error=f"Bad number: {e}", saved=False, rescored=None,
+            )
+
+        total_w = sum(new_cfg["weights"].values())
+        if abs(total_w - 1.0) > 0.001:
+            return render_template(
+                "config.html", cfg=new_cfg, known_sources=KNOWN_SOURCES,
+                error=f"Weights must sum to 1.0 (got {total_w:.3f}). Adjust the four weight fields.",
+                saved=False, rescored=None,
+            )
+        if new_cfg["hard_filters"]["min_rent"] > new_cfg["hard_filters"]["max_rent"]:
+            return render_template(
+                "config.html", cfg=new_cfg, known_sources=KNOWN_SOURCES,
+                error="min_rent cannot exceed max_rent.", saved=False, rescored=None,
+            )
+
+        _save_criteria_yaml(new_cfg)
+        # Re-score everything in the DB against the new criteria.
+        criteria = Criteria.load(CRITERIA_PATH)
+        n = _rescore_all(get_conn(), criteria)
+        return redirect(url_for("config_view", saved=1, rescored=n))
 
     @app.route("/listing/<source>/<external_id>/hide", methods=["POST"])
     def toggle_hide(source, external_id):

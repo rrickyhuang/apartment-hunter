@@ -11,6 +11,7 @@ from . import db
 from .alerter import send_digest
 from .scoring import Criteria, passes_hard_filters, score
 from .scrapers.craigslist import CraigslistScraper
+from .scrapers.kijiji import KijijiScraper
 from .scrapers.rentals_ca import RentalsCaScraper
 from .scrapers.rentfaster import RentfasterScraper
 
@@ -24,11 +25,15 @@ DEFAULT_DB = PROJECT_ROOT / "data" / "listings.db"
 def build_scrapers(c: Criteria):
     max_rent = int(c.hard_filters.get("max_rent", 2000))
     min_beds = float(c.hard_filters.get("min_beds", 0))
-    return [
-        RentalsCaScraper(max_rent=max_rent, min_beds=min_beds),
-        RentfasterScraper(max_rent=max_rent),
-        CraigslistScraper(max_rent=max_rent),
+    min_rent = int(c.hard_filters.get("min_rent", 500))
+    sources_cfg = c.hard_filters.get("sources", {}) or {}
+    all_scrapers = [
+        ("rentals_ca", RentalsCaScraper(max_rent=max_rent, min_beds=min_beds)),
+        ("rentfaster", RentfasterScraper(max_rent=max_rent)),
+        ("kijiji", KijijiScraper(max_rent=max_rent, min_rent=min_rent)),
+        ("craigslist", CraigslistScraper(max_rent=max_rent, min_rent=min_rent)),
     ]
+    return [s for name, s in all_scrapers if sources_cfg.get(name, True)]
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,0 +1,38 @@
+{# Self-contained scrape control. While a scrape is running, this element
+   polls /scrape/status every 2s and swaps itself in place. When the scrape
+   finishes the server returns HX-Refresh: true, causing a full page reload. #}
+<div id="scrape-btn"
+     {% if scrape_state.running %}
+       hx-get="/scrape/status"
+       hx-trigger="every 2s"
+       hx-target="this"
+       hx-swap="outerHTML"
+     {% endif %}>
+  {% if scrape_state.running %}
+    <span class="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-100 text-amber-800 rounded text-sm border border-amber-300">
+      <span class="inline-block w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span>
+      Scraping… {{ scrape_state.elapsed }}s
+    </span>
+  {% elif scrape_state.error %}
+    <button
+      hx-post="/scrape" hx-target="#scrape-btn" hx-swap="outerHTML"
+      class="px-3 py-1.5 bg-red-50 text-red-700 border border-red-300 rounded text-sm hover:bg-red-100"
+      title="Last run errored: {{ scrape_state.error }}"
+    >⚠ Retry scrape</button>
+  {% elif scrape_state.just_finished %}
+    <span
+      class="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded text-sm border border-emerald-300"
+      hx-get="/scrape/status"
+      hx-trigger="load delay:4s"
+      hx-target="#scrape-btn"
+      hx-swap="outerHTML"
+    >
+      ✅ Done{% if scrape_state.new_count %} — {{ scrape_state.new_count }} new{% endif %}
+    </span>
+  {% else %}
+    <button
+      hx-post="/scrape" hx-target="#scrape-btn" hx-swap="outerHTML"
+      class="px-3 py-1.5 bg-slate-900 text-white rounded text-sm hover:bg-slate-700"
+    >🔄 Run scrape</button>
+  {% endif %}
+</div>

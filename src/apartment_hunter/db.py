@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS listings (
     notes TEXT NOT NULL DEFAULT '',
     hidden INTEGER NOT NULL DEFAULT 0,
     status_updated_at TEXT,
+    starred INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (source, external_id)
 );
 """
@@ -45,6 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_alerted ON listings(alerted);
 CREATE INDEX IF NOT EXISTS idx_score ON listings(score);
 CREATE INDEX IF NOT EXISTS idx_status ON listings(status);
 CREATE INDEX IF NOT EXISTS idx_hidden ON listings(hidden);
+CREATE INDEX IF NOT EXISTS idx_starred ON listings(starred);
 """
 
 # Statuses the UI cycles through. Order matters — used for filter pills.
@@ -62,6 +64,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         ("notes", "ALTER TABLE listings ADD COLUMN notes TEXT NOT NULL DEFAULT ''"),
         ("hidden", "ALTER TABLE listings ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0"),
         ("status_updated_at", "ALTER TABLE listings ADD COLUMN status_updated_at TEXT"),
+        ("starred", "ALTER TABLE listings ADD COLUMN starred INTEGER NOT NULL DEFAULT 0"),
     ]:
         if col not in cols:
             conn.execute(ddl)
@@ -97,6 +100,14 @@ def set_notes(conn: sqlite3.Connection, source: str, external_id: str, notes: st
     conn.commit()
 
 
+def set_starred(conn: sqlite3.Connection, source: str, external_id: str, starred: bool) -> None:
+    conn.execute(
+        "UPDATE listings SET starred=? WHERE source=? AND external_id=?",
+        (1 if starred else 0, source, external_id),
+    )
+    conn.commit()
+
+
 def set_hidden(conn: sqlite3.Connection, source: str, external_id: str, hidden: bool) -> None:
     conn.execute(
         "UPDATE listings SET hidden=? WHERE source=? AND external_id=?",
@@ -120,6 +131,7 @@ def query_listings(
     max_price: int | None = None,
     min_beds: float | None = None,
     show_hidden: bool = False,
+    starred_only: bool = False,
     search: str | None = None,
     sort: str = "score_desc",
     limit: int = 500,
@@ -128,6 +140,8 @@ def query_listings(
     params: list = []
     if not show_hidden:
         where.append("hidden = 0")
+    if starred_only:
+        where.append("starred = 1")
     if statuses:
         where.append(f"status IN ({','.join('?' * len(statuses))})")
         params.extend(statuses)

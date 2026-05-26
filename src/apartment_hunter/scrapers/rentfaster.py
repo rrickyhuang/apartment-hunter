@@ -10,35 +10,65 @@ from .base import Scraper
 
 log = logging.getLogger(__name__)
 
-# Vancouver city_id on rentfaster. Verify when running — they occasionally renumber.
-VANCOUVER_CITY_ID = 3
+# rentfaster city_ids for Vancouver + metro. Verified by scraping
+# https://www.rentfaster.ca/bc/<slug> and reading the embedded city_id.
+METRO_VAN_CITY_IDS = {
+    6:     "Vancouver",
+    76:    "Burnaby",
+    93:    "Richmond",
+    91:    "North Vancouver",
+    74:    "New Westminster",
+    72:    "Surrey",
+    80:    "Coquitlam",
+    10173: "West Vancouver",
+}
+
+# Safety net: even if rentfaster mis-tags a listing's city_id, drop anything
+# whose returned city field is outside this set.
+ALLOWED_CITIES = {c.lower() for c in METRO_VAN_CITY_IDS.values()} | {
+    "port coquitlam", "port moody", "delta", "langley", "maple ridge", "white rock",
+}
 
 
 class RentfasterScraper(Scraper):
     source = "rentfaster"
 
-    def __init__(self, max_rent: int = 2000, city_id: int = VANCOUVER_CITY_ID):
+    def __init__(self, max_rent: int = 2000, city_ids: list[int] | None = None):
         self.max_rent = max_rent
-        self.city_id = city_id
+        self.city_ids = city_ids or list(METRO_VAN_CITY_IDS.keys())
 
     def fetch(self) -> list[Listing]:
         url = "https://www.rentfaster.ca/api/map.json"
-        params = {"city_id": self.city_id, "price_range_to": self.max_rent}
+        all_items: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
 
-        try:
-            r = http_get(url, params=params)
-            r.raise_for_status()
-            data = r.json()
-        except Exception as e:
-            log.warning("rentfaster fetch failed: %s", e)
-            return []
+        for cid in self.city_ids:
+            try:
+                r = http_get(url, params={"city_id": cid, "price_range_to": self.max_rent})
+                r.raise_for_status()
+                items = r.json().get("listings", []) or []
+            except Exception as e:
+                log.warning("rentfaster city_id=%s fetch failed: %s", cid, e)
+                continue
+            for it in items:
+                rid = str(it.get("ref_id") or it.get("id") or "")
+                if rid and rid not in seen_ids:
+                    seen_ids.add(rid)
+                    all_items.append(it)
 
         listings: list[Listing] = []
-        for item in data.get("listings", []):
+        dropped_non_bc = 0
+        for item in all_items:
+            city = (item.get("city") or "").strip().lower()
+            if city and city not in ALLOWED_CITIES:
+                dropped_non_bc += 1
+                continue
             try:
                 listings.append(self._parse(item))
             except Exception as e:
                 log.debug("skipping malformed listing: %s", e)
+        if dropped_non_bc:
+            log.info("rentfaster: dropped %d listings outside metro Vancouver", dropped_non_bc)
         return listings
 
     def _parse(self, item: dict[str, Any]) -> Listing:

@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Edit criteria — Apartment Hunter{% endblock %}
+{% block content %}
+
+{% set hf = cfg.get('hard_filters', {}) %}
+{% set wt = cfg.get('weights', {}) %}
+{% set pr = cfg.get('preferences', {}) %}
+{% set srcs = hf.get('sources', {}) %}
+
+<h1 class="text-2xl font-semibold mb-1">Scoring criteria</h1>
+<p class="text-sm text-slate-500 mb-5">
+  Edits write back to <code>config/criteria.yaml</code>. Saving re-scores every
+  listing in your database against the new rules.
+</p>
+
+{% if saved %}
+  <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded p-3 mb-4 text-sm">
+    ✅ Saved.{% if rescored %} Re-scored {{ rescored }} listing(s).{% endif %}
+  </div>
+{% endif %}
+{% if error %}
+  <div class="bg-red-50 border border-red-200 text-red-800 rounded p-3 mb-4 text-sm">
+    ⚠ {{ error }}
+  </div>
+{% endif %}
+
+<form method="post" class="space-y-6">
+
+  <section class="bg-white border rounded-lg p-5">
+    <h2 class="font-semibold mb-3">Hard filters <span class="text-xs text-slate-500 font-normal">— listings failing these are stored but never alerted</span></h2>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+      <label>Max rent ($/mo)
+        <input type="number" name="max_rent" value="{{ hf.get('max_rent', 2000) }}"
+               class="mt-1 w-full px-2 py-1 border rounded" min="0">
+      </label>
+      <label>Min rent ($/mo)
+        <input type="number" name="min_rent" value="{{ hf.get('min_rent', 500) }}"
+               class="mt-1 w-full px-2 py-1 border rounded" min="0">
+        <span class="text-xs text-slate-500">drops obvious scams / per-week prices</span>
+      </label>
+      <label>Min beds
+        <input type="number" step="0.5" name="min_beds" value="{{ hf.get('min_beds', 0) }}"
+               class="mt-1 w-full px-2 py-1 border rounded" min="0">
+        <span class="text-xs text-slate-500">0 = studios allowed</span>
+      </label>
+    </div>
+
+    <label class="block mt-3 text-sm">Allowed cities <span class="text-xs text-slate-500">(comma-separated)</span>
+      <input type="text" name="cities" value="{{ hf.get('cities', []) | join(', ') }}"
+             class="mt-1 w-full px-2 py-1 border rounded">
+    </label>
+
+    <label class="block mt-3 text-sm">Deal-breakers <span class="text-xs text-slate-500">(comma-separated; matched against title/description/address)</span>
+      <input type="text" name="deal_breakers" value="{{ hf.get('deal_breakers', []) | join(', ') }}"
+             class="mt-1 w-full px-2 py-1 border rounded"
+             placeholder="e.g. shared bathroom, basement">
+    </label>
+
+    <div class="mt-4">
+      <div class="text-sm font-medium mb-1">Sources to scrape</div>
+      <div class="flex flex-wrap gap-4 text-sm">
+        {% for src in known_sources %}
+          <label class="flex items-center gap-2">
+            <input type="checkbox" name="src_{{ src }}"
+                   {% if srcs.get(src, true) %}checked{% endif %}>
+            {{ src }}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-white border rounded-lg p-5">
+    <h2 class="font-semibold mb-1">Weights <span class="text-xs text-slate-500 font-normal">— must sum to 1.0</span></h2>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+      <label>Price
+        <input type="number" step="0.05" min="0" max="1" name="w_price" value="{{ wt.get('price', 0.45) }}"
+               class="mt-1 w-full px-2 py-1 border rounded">
+      </label>
+      <label>Location
+        <input type="number" step="0.05" min="0" max="1" name="w_location" value="{{ wt.get('location', 0.25) }}"
+               class="mt-1 w-full px-2 py-1 border rounded">
+      </label>
+      <label>Size
+        <input type="number" step="0.05" min="0" max="1" name="w_size" value="{{ wt.get('size', 0.15) }}"
+               class="mt-1 w-full px-2 py-1 border rounded">
+      </label>
+      <label>Amenities
+        <input type="number" step="0.05" min="0" max="1" name="w_amenities" value="{{ wt.get('amenities', 0.15) }}"
+               class="mt-1 w-full px-2 py-1 border rounded">
+      </label>
+    </div>
+  </section>
+
+  <section class="bg-white border rounded-lg p-5">
+    <h2 class="font-semibold mb-3">Preferences <span class="text-xs text-slate-500 font-normal">— shape the score within the allowed band</span></h2>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+      <label>Target rent
+        <input type="number" name="target_rent" value="{{ pr.get('target_rent', 1700) }}"
+               class="mt-1 w-full px-2 py-1 border rounded" min="0">
+        <span class="text-xs text-slate-500">at/below = full price score</span>
+      </label>
+      <label>Min sqft
+        <input type="number" name="min_sqft" value="{{ pr.get('min_sqft', 400) }}"
+               class="mt-1 w-full px-2 py-1 border rounded" min="0">
+      </label>
+      <label>Target sqft
+        <input type="number" name="target_sqft" value="{{ pr.get('target_sqft', 700) }}"
+               class="mt-1 w-full px-2 py-1 border rounded" min="0">
+        <span class="text-xs text-slate-500">at/above = full size score</span>
+      </label>
+    </div>
+
+    <label class="block mt-3 text-sm">Preferred neighborhoods <span class="text-xs text-slate-500">(comma-separated)</span>
+      <input type="text" name="preferred_neighborhoods"
+             value="{{ pr.get('preferred_neighborhoods', []) | join(', ') }}"
+             class="mt-1 w-full px-2 py-1 border rounded">
+    </label>
+
+    <label class="block mt-3 text-sm">Nice-to-have amenities <span class="text-xs text-slate-500">(comma-separated; e.g. <code>in_unit_laundry, balcony</code>)</span>
+      <textarea name="nice_to_have" rows="2"
+                class="mt-1 w-full px-2 py-1 border rounded font-mono text-xs">{{ pr.get('nice_to_have', []) | join(', ') }}</textarea>
+    </label>
+  </section>
+
+  <section class="bg-white border rounded-lg p-5">
+    <h2 class="font-semibold mb-3">Alerts</h2>
+    <label class="text-sm">Alert threshold (0–100)
+      <input type="number" step="1" min="0" max="100" name="alert_threshold"
+             value="{{ cfg.get('alert_threshold', 70) }}"
+             class="mt-1 w-32 px-2 py-1 border rounded">
+      <span class="text-xs text-slate-500 ml-2">listings scoring ≥ this trigger email digests</span>
+    </label>
+  </section>
+
+  <div class="flex items-center gap-3">
+    <button type="submit" class="px-5 py-2 bg-slate-900 text-white rounded hover:bg-slate-700">
+      Save &amp; re-score
+    </button>
+    <a href="/" class="text-sm text-slate-500 hover:text-slate-900">Cancel</a>
+  </div>
+</form>
+
+{% endblock %}

@@ -24,6 +24,10 @@
     <input type="number" name="min_score" value="{{ min_score|num }}" placeholder="Min score"
            class="w-24 px-2 py-1 border rounded">
     <label class="text-xs text-slate-600 flex items-center gap-1">
+      <input type="checkbox" name="starred" value="1" {% if starred_only %}checked{% endif %}>
+      ★ Starred only
+    </label>
+    <label class="text-xs text-slate-600 flex items-center gap-1">
       <input type="checkbox" name="hidden" value="1" {% if show_hidden %}checked{% endif %}>
       Show hidden
     </label>
@@ -48,7 +52,7 @@
       <label class="cursor-pointer">
         <input type="checkbox" name="source" value="{{ src }}" class="hidden peer"
                {% if src in source_filter %}checked{% endif %}>
-        <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 peer-checked:bg-slate-900 peer-checked:text-white">
+        <span class="source-pill">
           {{ src }} · {{ c }}
         </span>
       </label>
@@ -60,40 +64,50 @@
 
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
   {% for r in rows %}
-    <a href="/listing/{{ r.source }}/{{ r.external_id }}"
-       class="bg-white rounded-lg border hover:shadow-md transition overflow-hidden flex flex-col">
-      <div class="aspect-[4/3] bg-slate-100 relative">
-        {% if r.image_url %}
-          <img src="{{ r.image_url }}" alt="" class="w-full h-full object-cover" loading="lazy">
-        {% else %}
-          <div class="w-full h-full flex items-center justify-center text-slate-400 text-sm">no photo</div>
-        {% endif %}
-        {% if r.score is not none %}
-          <span class="absolute top-2 right-2 bg-slate-900/90 text-white text-xs font-bold px-2 py-1 rounded">
-            {{ r.score|num }}
-          </span>
-        {% endif %}
-        <span class="absolute top-2 left-2 status-pill status-{{ r.status }}">{{ r.status }}</span>
-      </div>
-      <div class="p-3 flex-1 flex flex-col">
-        <div class="flex items-baseline justify-between gap-2">
-          <span class="text-lg font-semibold">{{ r.price|money }}</span>
-          <span class="text-xs text-slate-500">{{ r.source }}</span>
+    <div class="bg-white rounded-lg border hover:shadow-md transition overflow-hidden flex flex-col relative group">
+      <a href="/listing/{{ r.source }}/{{ r.external_id }}" class="block">
+        <div class="aspect-[4/3] bg-slate-100 relative">
+          {% if r.image_url %}
+            <img src="{{ r.image_url }}" alt="" class="w-full h-full object-cover" loading="lazy"
+                 referrerpolicy="no-referrer">
+          {% else %}
+            <div class="w-full h-full flex items-center justify-center text-slate-400 text-sm">no photo</div>
+          {% endif %}
+          {% if r.score is not none %}
+            <span class="absolute top-2 right-2 bg-slate-900/90 text-white text-xs font-bold px-2 py-1 rounded">
+              {{ r.score|num }}
+            </span>
+          {% endif %}
         </div>
-        <div class="text-xs text-slate-600 mt-0.5">
-          {% if r.beds is not none %}{{ r.beds|num(1) }} bed{% else %}? bed{% endif %}
-          {%- if r.baths is not none %} · {{ r.baths|num(1) }} bath{% endif %}
-          {%- if r.sqft %} · {{ r.sqft }} sqft{% endif %}
+        <div class="p-3 flex-1 flex flex-col">
+          <div class="flex items-baseline justify-between gap-2">
+            <span class="text-lg font-semibold">{{ r.price|money }}</span>
+            <span class="text-xs text-slate-500">{{ r.source }}</span>
+          </div>
+          <div class="text-xs text-slate-600 mt-0.5">
+            {% if r.beds is not none %}{{ r.beds|num(1) }} bed{% else %}? bed{% endif %}
+            {%- if r.baths is not none %} · {{ r.baths|num(1) }} bath{% endif %}
+            {%- if r.sqft %} · {{ r.sqft }} sqft{% endif %}
+          </div>
+          <div class="text-sm mt-1 line-clamp-2 font-medium">{{ r.title }}</div>
+          {% if r.address %}
+            <div class="text-xs text-slate-500 mt-1">{{ r.address }}</div>
+          {% endif %}
+          {% if r.notes %}
+            <div class="text-xs text-amber-700 mt-2 italic line-clamp-2">📝 {{ r.notes }}</div>
+          {% endif %}
         </div>
-        <div class="text-sm mt-1 line-clamp-2 font-medium">{{ r.title }}</div>
-        {% if r.address %}
-          <div class="text-xs text-slate-500 mt-1">{{ r.address }}</div>
-        {% endif %}
-        {% if r.notes %}
-          <div class="text-xs text-amber-700 mt-2 italic line-clamp-2">📝 {{ r.notes }}</div>
-        {% endif %}
-      </div>
-    </a>
+      </a>
+
+      {# Quick-actions overlay: star (top-left) + status dropdown (bottom-right).
+         The status dropdown lives outside the <a>, so clicks don't navigate. #}
+      {% with row=r %}
+        {% include "_star_button.html" %}
+        <div class="absolute bottom-3 right-3">
+          {% include "_card_status.html" %}
+        </div>
+      {% endwith %}
+    </div>
   {% else %}
     <div class="col-span-full text-center text-slate-500 py-12">
       No listings match. Try clearing filters, or run the scraper:

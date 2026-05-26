@@ -16,13 +16,33 @@
     .status-accepted  { background:#d1fae5; color:#065f46; }
     .status-rejected  { background:#fee2e2; color:#991b1b; }
     .status-archived  { background:#f3f4f6; color:#6b7280; opacity:0.7; }
+
+    /* Source filter pills — neutral pill, blue when selected. Same for every source. */
+    .source-pill {
+      display:inline-block;
+      padding: 2px 10px;
+      border-radius: 9999px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #475569;
+    }
+    .peer:checked ~ .source-pill,
+    .source-pill-on {
+      background: #2563eb;
+      border-color: #2563eb;
+      color: #ffffff;
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
   <header class="bg-white border-b sticky top-0 z-10">
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
       <a href="/" class="text-lg font-semibold">🏠 Apartment Hunter</a>
-      <nav class="text-sm text-slate-500">Vancouver rentals</nav>
+      <nav class="text-sm flex items-center gap-4">
+        <a href="/" class="text-slate-500 hover:text-slate-900">Listings</a>
+        <a href="/config" class="text-slate-500 hover:text-slate-900">⚙ Criteria</a>
+        {% include "_scrape_button.html" %}
+      </nav>
     </div>
   </header>
   <main class="max-w-7xl mx-auto px-4 py-6">
