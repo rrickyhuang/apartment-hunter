@@ -1,49 +1,43 @@
-# Edit freely. Reloaded each run — no restart needed.
-# You can also edit this from the UI at http://127.0.0.1:5000/config
-
 hard_filters:
   max_rent: 2000
-  min_rent: 500                        # drops obvious scams / per-week prices
-  min_beds: 0                          # 0 = studios allowed
+  min_rent: 1000
+  min_beds: 0.0
   cities:
-    - Vancouver
-    - Burnaby
-    - New Westminster
-    - Richmond
-    - North Vancouver
-    - West Vancouver
-  deal_breakers: []                    # e.g. ["shared bathroom", "basement"]
-  sources:                             # toggle individual scrapers
+  - Vancouver
+  - Burnaby
+  - New Westminster
+  - Richmond
+  - North Vancouver
+  - West Vancouver
+  deal_breakers:
+  - basement
+  - roommate
+  - coin laundry
+  sources:
     rentals_ca: true
     rentfaster: true
     kijiji: true
-    craigslist: false                  # off by default — too noisy
-
-# Weights must sum to 1.0
+    craigslist: true
 weights:
-  price: 0.45
-  location: 0.25
-  size: 0.15
+  price: 0.4
+  location: 0.35
+  size: 0.1
   amenities: 0.15
-
 preferences:
-  target_rent: 1700                    # rents <= this get full price score
+  target_rent: 1900
   preferred_neighborhoods:
-    - Mount Pleasant
-    - Kitsilano
-    - Commercial Drive
-    - Yaletown
-    - Downtown
-    - Gastown
-    - Olympic Village
+  - Mount Pleasant
+  - Kitsilano
+  - Commercial Drive
+  - Yaletown
+  - Downtown
+  - Gastown
+  - Olympic Village
   min_sqft: 400
-  target_sqft: 700                     # sqft >= this gets full size score
+  target_sqft: 700
   nice_to_have:
-    - in_unit_laundry
-    - dishwasher
-    - balcony
-    - gym
-    - parking
-    - heat_included
-
-alert_threshold: 70                    # 0-100 — emails sent at or above this
+  - in_unit_laundry
+  - dishwasher
+  - balcony
+  - gym
+alert_threshold: 75.0

@@ -186,7 +186,19 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
         sort = request.args.get("sort", "score_desc")
         show_hidden = request.args.get("hidden") == "1"
         starred_only = request.args.get("starred") == "1"
+        # "Hide non-viable" is on by default — listings priced below the
+        # current min_rent get filtered out. Pass &nonviable=1 to see them.
+        show_nonviable = request.args.get("nonviable") == "1"
         search = request.args.get("q", "").strip() or None
+
+        # Pull min_rent from criteria so the filter tracks the user's config.
+        criteria_min_rent = None
+        if not show_nonviable:
+            try:
+                cfg = _load_criteria_yaml()
+                criteria_min_rent = int(cfg.get("hard_filters", {}).get("min_rent") or 0) or None
+            except Exception as e:
+                log.warning("could not read criteria for min_rent filter: %s", e)
         try:
             min_score = float(request.args.get("min_score", "0") or 0)
         except ValueError:
@@ -205,6 +217,7 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
             statuses=status_filter or None,
             sources=source_filter or None,
             min_score=min_score,
+            min_price=criteria_min_rent,
             max_price=max_price,
             min_beds=min_beds,
             show_hidden=show_hidden,
@@ -222,6 +235,8 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
             source_filter=source_filter,
             sort=sort,
             show_hidden=show_hidden,
+            show_nonviable=show_nonviable,
+            criteria_min_rent=criteria_min_rent,
             starred_only=starred_only,
             search=search or "",
             min_score=min_score,

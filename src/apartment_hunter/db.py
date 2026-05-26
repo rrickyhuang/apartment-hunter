@@ -128,6 +128,7 @@ def query_listings(
     statuses: list[str] | None = None,
     sources: list[str] | None = None,
     min_score: float | None = None,
+    min_price: int | None = None,
     max_price: int | None = None,
     min_beds: float | None = None,
     show_hidden: bool = False,
@@ -154,6 +155,11 @@ def query_listings(
     if max_price is not None:
         where.append("(price IS NULL OR price <= ?)")
         params.append(max_price)
+    if min_price is not None:
+        # Strict: drop unpriced listings too — if the user set a floor, listings
+        # without a price aren't viable either.
+        where.append("price IS NOT NULL AND price >= ?")
+        params.append(min_price)
     if min_beds is not None:
         where.append("(beds IS NULL OR beds >= ?)")
         params.append(min_beds)
