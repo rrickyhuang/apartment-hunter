@@ -133,6 +133,37 @@
     </label>
   </section>
 
+  {% set sch = cfg.get('schedule', {}) %}
+  {% set sch_state = scheduler_state | default({}) %}
+  <section class="bg-white border rounded-lg p-5">
+    <h2 class="font-semibold mb-3">Auto-scrape schedule
+      <span class="text-xs text-slate-500 font-normal">— runs in the background while this UI is open</span>
+    </h2>
+    <div class="flex flex-wrap items-center gap-5 text-sm">
+      <label class="flex items-center gap-2">
+        <input type="checkbox" name="schedule_enabled"
+               {% if sch.get('enabled') %}checked{% endif %}>
+        Enable auto-scrape
+      </label>
+      <label>Interval (minutes)
+        <input type="number" min="1" name="schedule_interval_minutes"
+               value="{{ sch.get('interval_minutes', 60) }}"
+               class="ml-1 w-24 px-2 py-1 border rounded">
+      </label>
+    </div>
+    <div class="text-xs text-slate-500 mt-2">
+      {% if sch_state.get('last_run_at') %}
+        Last auto run: {{ sch_state.last_run_at | int }} (epoch).
+      {% else %}
+        No auto runs yet this session.
+      {% endif %}
+      {% if sch_state.get('next_run_at') %}
+        Next due: {{ sch_state.next_run_at | int }} (epoch).
+      {% endif %}
+      For runs that continue after closing the UI, use Windows Task Scheduler with <code>scripts/run_hunter.bat</code>.
+    </div>
+  </section>
+
   <div class="flex items-center gap-3">
     <button type="submit" class="px-5 py-2 bg-slate-900 text-white rounded hover:bg-slate-700">
       Save &amp; re-score

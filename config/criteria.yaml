@@ -41,3 +41,6 @@ preferences:
   - balcony
   - gym
 alert_threshold: 75.0
+schedule:
+  enabled: true
+  interval_minutes: 60

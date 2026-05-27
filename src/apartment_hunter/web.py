@@ -80,6 +80,17 @@ _scrape_state = {
 }
 _scrape_lock = threading.Lock()
 
+# --- Auto-scrape scheduler state ---------------------------------------------
+# A single daemon thread polls the schedule config and kicks off scrapes when
+# the configured interval has elapsed. State here is in-memory only; the
+# enabled flag and interval persist in criteria.yaml.
+_scheduler_state = {
+    "last_run_at": None,   # epoch seconds of last auto-triggered run
+    "next_run_at": None,   # epoch seconds when next auto run is due
+}
+_scheduler_started = False
+_scheduler_lock = threading.Lock()
+
 
 def _run_scrape_thread(db_path: str) -> None:
     """Runs the full scraper pipeline in dry-run mode (no email). Updates
@@ -133,6 +144,54 @@ def _scrape_view_state() -> dict:
     return s
 
 
+def _trigger_scrape(db_path: str) -> bool:
+    """Start a scrape thread if none is running. Returns True if started."""
+    with _scrape_lock:
+        if _scrape_state["running"]:
+            return False
+        _scrape_state["running"] = True
+        _scrape_state["started_at"] = time.time()
+        _scrape_state["error"] = None
+        _scrape_state["refresh_pending"] = False
+    threading.Thread(
+        target=_run_scrape_thread, args=(db_path,), daemon=True
+    ).start()
+    return True
+
+
+def _scheduler_loop(db_path: str) -> None:
+    """Background loop: re-reads schedule from criteria.yaml every tick so
+    enabling/disabling or changing interval takes effect without a restart."""
+    while True:
+        try:
+            cfg = _load_criteria_yaml()
+            sched = cfg.get("schedule", {}) or {}
+            enabled = bool(sched.get("enabled"))
+            interval_min = max(1, int(sched.get("interval_minutes") or 60))
+        except Exception as e:
+            log.warning("scheduler: failed to read criteria: %s", e)
+            enabled, interval_min = False, 60
+
+        now = time.time()
+        if enabled:
+            last = _scheduler_state["last_run_at"]
+            due = last is None or (now - last) >= interval_min * 60
+            with _scheduler_lock:
+                _scheduler_state["next_run_at"] = (
+                    (last or now) + interval_min * 60 if last else now
+                )
+            if due:
+                if _trigger_scrape(db_path):
+                    with _scheduler_lock:
+                        _scheduler_state["last_run_at"] = now
+                        _scheduler_state["next_run_at"] = now + interval_min * 60
+                    log.info("scheduler: triggered auto-scrape")
+        else:
+            with _scheduler_lock:
+                _scheduler_state["next_run_at"] = None
+        time.sleep(30)
+
+
 def _rescore_all(conn, criteria: Criteria) -> int:
     """Re-score every listing in the DB against `criteria`. Returns count."""
     rows = db.all_listings(conn)
@@ -151,6 +210,13 @@ def _rescore_all(conn, criteria: Criteria) -> int:
 def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
     app = Flask(__name__)
     app.config["DB_PATH"] = str(db_path)
+
+    global _scheduler_started
+    if not _scheduler_started:
+        _scheduler_started = True
+        threading.Thread(
+            target=_scheduler_loop, args=(str(db_path),), daemon=True
+        ).start()
 
     def get_conn():
         return db.connect(app.config["DB_PATH"])
@@ -298,22 +364,7 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
     @app.route("/scrape", methods=["POST"])
     def scrape_start():
         """Kick off a background scrape if one isn't already running."""
-        started = False
-        with _scrape_lock:
-            if not _scrape_state["running"]:
-                # Flip the flag synchronously so the rendered response shows
-                # the "Scraping…" pill immediately (no race with the thread).
-                _scrape_state["running"] = True
-                _scrape_state["started_at"] = time.time()
-                _scrape_state["error"] = None
-                _scrape_state["refresh_pending"] = False
-                started = True
-        if started:
-            threading.Thread(
-                target=_run_scrape_thread,
-                args=(app.config["DB_PATH"],),
-                daemon=True,
-            ).start()
+        _trigger_scrape(app.config["DB_PATH"])
         return render_template("_scrape_button.html", scrape_state=_scrape_view_state())
 
     @app.route("/scrape/status", methods=["GET"])
@@ -334,6 +385,8 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
     @app.route("/config", methods=["GET"])
     def config_view():
         cfg = _load_criteria_yaml()
+        with _scheduler_lock:
+            sched_state = dict(_scheduler_state)
         return render_template(
             "config.html",
             cfg=cfg,
@@ -341,6 +394,7 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
             saved=request.args.get("saved") == "1",
             rescored=request.args.get("rescored"),
             error=None,
+            scheduler_state=sched_state,
         )
 
     @app.route("/config", methods=["POST"])
@@ -367,6 +421,10 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
                     "nice_to_have": _csv_list(f.get("nice_to_have", "")),
                 },
                 "alert_threshold": float(f.get("alert_threshold") or 0),
+                "schedule": {
+                    "enabled": f.get("schedule_enabled") == "on",
+                    "interval_minutes": max(1, int(f.get("schedule_interval_minutes") or 60)),
+                },
             }
         except ValueError as e:
             return render_template(
