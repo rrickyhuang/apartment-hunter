@@ -57,6 +57,32 @@ Things to audit:
 
 ---
 
+## UX
+
+### "Back to listings" button should remember the previous view
+On the listing detail page the back link always returns to the list view, even if you arrived
+from `/map`. Track the referring view (query param or `document.referrer`) and route back
+accordingly.
+
+### Default to opening listings in a new tab
+Clicking a card on the list/map should open the detail view in a new tab by default, so the
+previous filter/scroll/map state is preserved without needing back navigation.
+
+### Status change on the detail view is unintuitive
+Revisit the status control on `/listing/<source>/<id>` — current placement / interaction is
+unclear. Consider a prominent labelled dropdown or a row of status pills near the title.
+
+### Show more detail in the listing detail view
+Surface whatever else is available on the row: description, amenities, sqft, address, posted/first-seen
+timestamps, source-specific fields, all photos rather than just the hero image.
+
+### Clarify "not interested" vs "archived"
+Decide whether "not interested" is a distinct status or just an alias for `archived`. If distinct,
+add it to the status enum (`db.py`, status pill palette in `base.html`, map legend). If it's the
+same, rename `archived` → `not_interested` for clarity, or document the mapping in the UI.
+
+---
+
 ## New Features
 
 ### Email / text tool for contacting listings

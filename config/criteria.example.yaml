@@ -40,6 +40,7 @@ preferences:
   - dishwasher
   - balcony
   - gym
+  - professionally managed
 alert_threshold: 75.0
 schedule:
   enabled: true

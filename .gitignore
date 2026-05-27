@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Personal config (tracked template: criteria.example.yaml)
+config/criteria.yaml
+
 # Data
 data/
 logs/

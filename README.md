@@ -21,7 +21,8 @@ copy .env.example .env
 # Edit .env and add your Gmail app password (see below)
 
 # 3. Edit your criteria (either edit the YAML directly or use the UI at /config)
-# config\criteria.yaml — budget, neighborhoods, sources, schedule, etc.
+copy config\criteria.example.yaml config\criteria.yaml
+# config\criteria.yaml — budget, neighborhoods, sources, schedule, etc. (gitignored)
 
 # 4. Smoke test (no email sent)
 python -m apartment_hunter.run --once --dry-run
