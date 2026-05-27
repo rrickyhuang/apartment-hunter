@@ -55,6 +55,20 @@ What you can do:
 - **Edit criteria** at `/config` — saves to `criteria.yaml` and re-scores every listing in the DB
 - **Auto-scrape scheduler** on `/config` — enable a background loop that re-runs the scrape every N minutes while the UI is open
 
+### Accessing from your phone (same Wi-Fi)
+
+`open_ui.bat` binds to `0.0.0.0` so other devices on your network can reach the UI. One-time Windows Firewall rule (PowerShell as admin):
+
+```powershell
+New-NetFirewallRule -DisplayName "Apartment Hunter" -Direction Inbound -LocalPort 5000 -Protocol TCP -Action Allow
+```
+
+Find your PC's LAN IP with `ipconfig` (look for IPv4 under your Wi-Fi adapter, typically `192.168.x.x`) and visit `http://192.168.x.x:5000` from your phone. The UI is mobile-responsive.
+
+⚠ No auth — anyone on the Wi-Fi can browse and edit. For cellular/away access, use [Tailscale](https://tailscale.com) rather than port-forwarding.
+
+### State
+
 All state lives in `data\listings.db` — shared with the scraper, so status/notes survive future runs and the same listing keeps its status if re-scraped.
 
 ---
