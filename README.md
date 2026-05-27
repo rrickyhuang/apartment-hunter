@@ -173,10 +173,9 @@ logs/run.log                      # run output (gitignored)
 All four sites sit behind Cloudflare or similar. From a normal home IP they usually serve the JSON / HTML fine, but endpoints occasionally change. If a run logs `0 listings` from a source:
 
 ### rentals.ca
-1. Open https://rentals.ca/vancouver in Chrome.
-2. Open DevTools → Network → filter `XHR` / `Fetch`.
-3. Pan the map; watch which request returns JSON with listing data.
-4. Copy the URL/params into `src/apartment_hunter/scrapers/rentals_ca.py` (`url` and `params` in `fetch`).
+Parses the SSR'd HTML page at `https://rentals.ca/vancouver?page=N`, extracting the inline `App.store.search = { response: {…} }` JSON hydration blob. The public JSON API (`/phoenix/api/v1/listings`) returns 500 without a browser-issued CSRF token and is not used. If the page layout changes:
+1. Run `python scripts/probe_rentalsca.py` to confirm the hydration marker still matches `response: {`.
+2. If broken, view-source on the page and find the new wrapper containing the `edges[].node` array — update `RESPONSE_MARKER` in `scrapers/rentals_ca.py`.
 
 ### rentfaster.ca
 The `city_id` for Vancouver may not be `3` — verify by browsing https://www.rentfaster.ca/bc/vancouver and watching the XHR call. Update `VANCOUVER_CITY_ID` in `scrapers/rentfaster.py`.

@@ -1,25 +1,15 @@
-"""rentals.ca scraper — currently STUBBED.
+"""rentals.ca scraper.
 
-Status as of last investigation: the obvious endpoints (/api/v1/listings,
-/api/v1.0.2/listings, api.rentals.ca/...) all return 404 even with proper
-Chrome TLS impersonation. The site uses heavy client-side rendering and the
-real listings API path could not be discovered without inspecting live
-network traffic in DevTools while panning the map.
-
-ACTION NEEDED (one-time, ~5 min):
-  1. Open https://rentals.ca/vancouver in Chrome
-  2. DevTools (F12) -> Network tab -> filter "Fetch/XHR"
-  3. Pan or zoom the map
-  4. Find the request that returns JSON containing listings
-  5. Right-click -> Copy -> Copy as cURL
-  6. Paste the URL/params into `_API_URL` and `_build_params` below
-  7. Delete the `return []` short-circuit at the bottom of fetch()
-
-Until that's done, fetch() returns an empty list and logs a hint.
+The public JSON API (/phoenix/api/v1/listings) returns 500 without a
+browser-issued CSRF token. Instead, we fetch the server-rendered HTML page
+which embeds the full GraphQL response in an inline `App.store.search = { ... }`
+script. Paginated via `?page=N` — SSR honors the query string.
 """
 from __future__ import annotations
 
+import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -29,113 +19,149 @@ from .base import Scraper
 
 log = logging.getLogger(__name__)
 
-DEFAULT_BBOX = {
-    "min_lat": 49.10, "max_lat": 49.35,
-    "min_lng": -123.30, "max_lng": -122.85,
-}
-
-_API_URL: str | None = None  # e.g. "https://rentals.ca/api/v??/listings"
+CITY_SLUG = "vancouver"
+PAGE_URL = "https://rentals.ca/{slug}"
+RESPONSE_MARKER = re.compile(r"response:\s*(\{)")
 
 
 class RentalsCaScraper(Scraper):
-    source = "rentals.ca"
+    source = "rentals_ca"
 
     def __init__(
         self,
         max_rent: int = 2000,
         min_beds: float = 0,
-        bbox: dict[str, float] | None = None,
-        max_pages: int = 10,
+        city_slug: str = CITY_SLUG,
+        max_pages: int = 15,
     ):
         self.max_rent = max_rent
         self.min_beds = min_beds
-        self.bbox = bbox or DEFAULT_BBOX
+        self.city_slug = city_slug
         self.max_pages = max_pages
 
     def fetch(self) -> list[Listing]:
-        if not _API_URL:
-            log.info(
-                "rentals.ca scraper is stubbed — set _API_URL after DevTools inspection "
-                "(see module docstring). Skipping for now."
-            )
-            return []
-
-        listings: list[Listing] = []
+        out: list[Listing] = []
+        seen: set[str] = set()
         for page in range(1, self.max_pages + 1):
+            url = PAGE_URL.format(slug=self.city_slug)
+            params = {"page": page} if page > 1 else None
             try:
-                r = http_get(_API_URL, params=self._build_params(page))
+                r = http_get(url, params=params)
                 r.raise_for_status()
-                data = r.json()
+                data = _extract_store_response(r.text)
             except Exception as e:
                 log.warning("rentals.ca page %d failed: %s", page, e)
                 break
 
-            items = data.get("listings") or data.get("data") or data.get("results") or []
-            if not items:
-                break
-            for item in items:
+            edges = data.get("data", {}).get("edges", []) or []
+            page_info = data.get("data", {}).get("pageInfo", {}) or {}
+
+            new_this_page = 0
+            for edge in edges:
+                node = edge.get("node") or {}
+                ext_id = str(node.get("id") or "")
+                if not ext_id or ext_id in seen:
+                    continue
+                seen.add(ext_id)
                 try:
-                    listings.append(self._parse(item))
+                    listing = self._parse(node)
                 except Exception as e:
-                    log.debug("skipping malformed listing: %s", e)
-            if len(items) < 50:
+                    log.debug("skipping malformed rentals.ca node: %s", e)
+                    continue
+                # Apply max_rent early — the site mixes price tiers.
+                if listing.price is not None and listing.price > self.max_rent:
+                    continue
+                if listing.beds is not None and listing.beds < self.min_beds:
+                    continue
+                out.append(listing)
+                new_this_page += 1
+
+            log.debug("rentals.ca page %d: %d edges, %d new kept", page, len(edges), new_this_page)
+            if not page_info.get("hasNextPage"):
                 break
-        return listings
+        return out
 
-    def _build_params(self, page: int) -> dict[str, Any]:
-        # Fill in once the real endpoint is known.
-        return {
-            "bbox": f"{self.bbox['min_lng']},{self.bbox['min_lat']},"
-                    f"{self.bbox['max_lng']},{self.bbox['max_lat']}",
-            "max_price": self.max_rent,
-            "min_bed": self.min_beds,
-            "page": page,
-        }
+    def _parse(self, node: dict[str, Any]) -> Listing:
+        ext_id = str(node["id"])
+        path = node.get("path") or ""
+        url = f"https://rentals.ca/{path}" if path else "https://rentals.ca/"
 
-    def _parse(self, item: dict[str, Any]) -> Listing:
-        ext_id = str(item.get("id") or item.get("listing_id") or item.get("uid"))
-        url = item.get("url") or item.get("link") or ""
-        if url and not url.startswith("http"):
-            url = "https://rentals.ca" + url
+        loc = node.get("rentalListingLocation") or [None, None]
+        lng, lat = (loc + [None, None])[:2]
 
-        price = item.get("price") or item.get("rent")
-        if isinstance(price, dict):
-            price = price.get("from") or price.get("min")
-        try:
-            price = int(price) if price is not None else None
-        except (TypeError, ValueError):
-            price = None
+        addr = node.get("address") or {}
+        city = (addr.get("city") or {}).get("cityName")
+        street = addr.get("street")
+
+        rent_range = node.get("rentRange") or []
+        beds_range = node.get("bedsRange") or []
+        baths_range = node.get("bathsRange") or []
+        size_range = node.get("sizeRange") or []
+
+        image_url = None
+        images = node.get("images") or []
+        if images:
+            scales = images[0].get("scales") or []
+            if scales:
+                image_url = scales[-1].get("url") or scales[0].get("url")
+
+        modified = node.get("modified")
+        posted_at = None
+        if modified:
+            try:
+                posted_at = datetime.fromisoformat(modified.replace("Z", "+00:00"))
+            except ValueError:
+                posted_at = None
 
         return Listing(
             source=self.source,
             external_id=ext_id,
             url=url,
-            title=item.get("title") or item.get("name") or "(no title)",
-            price=price,
-            beds=_to_float(item.get("bedrooms") or item.get("beds")),
-            baths=_to_float(item.get("bathrooms") or item.get("baths")),
-            sqft=_to_int(item.get("sqft") or item.get("size")),
-            address=item.get("address"),
-            city=item.get("city"),
-            lat=_to_float(item.get("lat")),
-            lng=_to_float(item.get("lng")),
-            posted_at=datetime.now(timezone.utc),
-            description=item.get("description"),
-            amenities=item.get("amenities") or [],
-            image_url=item.get("image") or item.get("photo"),
-            raw=item,
+            title=node.get("rentalListingName") or "(no title)",
+            price=int(rent_range[0]) if rent_range else None,
+            beds=float(beds_range[0]) if beds_range else None,
+            baths=float(baths_range[0]) if baths_range else None,
+            sqft=int(size_range[0]) if size_range else None,
+            address=street,
+            city=city,
+            lat=float(lat) if lat is not None else None,
+            lng=float(lng) if lng is not None else None,
+            posted_at=posted_at or datetime.now(timezone.utc),
+            description=None,
+            amenities=[],
+            image_url=image_url,
+            raw=node,
         )
 
 
-def _to_float(x: Any) -> float | None:
-    if x is None or x == "":
-        return None
-    try:
-        return float(x)
-    except (TypeError, ValueError):
-        return None
-
-
-def _to_int(x: Any) -> int | None:
-    f = _to_float(x)
-    return int(f) if f is not None else None
+def _extract_store_response(html: str) -> dict[str, Any]:
+    """Find the inline `response: { ... }` JSON in the hydration script and
+    return the parsed object. Raises on missing/unbalanced braces."""
+    m = RESPONSE_MARKER.search(html)
+    if not m:
+        raise RuntimeError("rentals.ca: hydration marker not found")
+    start = m.end() - 1
+    depth = 0
+    in_str = False
+    esc = False
+    i = start
+    while i < len(html):
+        c = html[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+        else:
+            if c == '"':
+                in_str = True
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    return json.loads(html[start : i + 1])
+        i += 1
+    raise RuntimeError("rentals.ca: unbalanced braces in hydration JSON")
