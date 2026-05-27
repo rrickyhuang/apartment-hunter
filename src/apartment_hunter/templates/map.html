@@ -22,7 +22,7 @@
   // Continuous red→yellow→green gradient across 0–1. Grey if unscored.
   function scoreFill(score) {
     if (score == null) return '#94a3b8';
-    const t = Math.max(0, Math.min(1, score));
+    const t = Math.max(0, Math.min(1, score / 100));
     // Two-segment: red→yellow (0–0.5), yellow→green (0.5–1)
     let r, g, b = 0;
     if (t < 0.5) {
@@ -69,7 +69,7 @@
       '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">' +
         '<span style="font-size:11px;color:#64748b">0</span>' +
         '<div style="flex:1;height:10px;border-radius:5px;background:linear-gradient(to right,#ef4444,#facc15,#22c55e)"></div>' +
-        '<span style="font-size:11px;color:#64748b">1</span>' +
+        '<span style="font-size:11px;color:#64748b">100</span>' +
       '</div>' +
       '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#94a3b8;margin-right:5px;vertical-align:middle"></span>unscored<br>' +
       '<div style="font-weight:600;margin:6px 0 4px">Status (ring)</div>' +
@@ -89,13 +89,13 @@
       '<div style="font-weight:600;margin-bottom:6px">Score filter</div>' +
       '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">' +
         '<label style="color:#64748b;width:28px">min</label>' +
-        '<input id="score-min" type="range" min="0" max="1" step="0.01" value="0" style="flex:1">' +
-        '<span id="score-min-val" style="width:30px;text-align:right;color:#334155">0.00</span>' +
+        '<input id="score-min" type="range" min="0" max="100" step="1" value="0" style="flex:1">' +
+        '<span id="score-min-val" style="width:30px;text-align:right;color:#334155">0</span>' +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:6px">' +
         '<label style="color:#64748b;width:28px">max</label>' +
-        '<input id="score-max" type="range" min="0" max="1" step="0.01" value="1" style="flex:1">' +
-        '<span id="score-max-val" style="width:30px;text-align:right;color:#334155">1.00</span>' +
+        '<input id="score-max" type="range" min="0" max="100" step="1" value="100" style="flex:1">' +
+        '<span id="score-max-val" style="width:30px;text-align:right;color:#334155">100</span>' +
       '</div>';
     // Prevent map drag/zoom when interacting with the control
     L.DomEvent.disableClickPropagation(d);
@@ -122,7 +122,7 @@
   function makePopup(f) {
     const p = f.properties;
     const price = p.price != null ? ('$' + p.price.toLocaleString()) : '—';
-    const score = p.score != null ? p.score.toFixed(2) : '—';
+    const score = p.score != null ? Math.round(p.score).toString() : '—';
     const beds  = p.beds  != null ? (p.beds + ' bd') : '';
     const title = p.title ? p.title.replace(/</g, '&lt;') : '(no title)';
     const scoreColor = scoreFill(p.score);
@@ -177,14 +177,14 @@
       let lo = parseFloat(minSlider.value);
       let hi = parseFloat(maxSlider.value);
       if (lo > hi) { lo = hi; minSlider.value = lo; }
-      minVal.textContent = lo.toFixed(2);
-      maxVal.textContent = hi.toFixed(2);
+      minVal.textContent = String(Math.round(lo));
+      maxVal.textContent = String(Math.round(hi));
       applyScoreFilter(lo, hi);
     }
     minSlider.addEventListener('input', onSlider);
     maxSlider.addEventListener('input', onSlider);
 
-    applyScoreFilter(0, 1);
+    applyScoreFilter(0, 100);
     map.fitBounds(layer.getBounds(), { padding: [30, 30] });
   }).catch(err => {
     meta.textContent = 'failed to load listings';
