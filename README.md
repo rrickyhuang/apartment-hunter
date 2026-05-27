@@ -44,7 +44,7 @@ Then open http://127.0.0.1:5000 in your browser. Or just double-click `scripts\o
 
 What you can do:
 - **Browse** all collected listings in a grid sorted by score (or price/newest)
-- **Filter** by status, source, max price, min beds, min score, free-text search
+- **Filter** by status, source, max price, min beds, min/max score, free-text search — filter bar is shared between list and map views
 - **Star** favorites and toggle a starred-only view
 - **Hide non-viable** listings (anything below `min_rent`) — on by default, with a toggle to show them
 - **Click any card** for full details, photo, amenities, and a link to the original listing
@@ -54,6 +54,7 @@ What you can do:
 - **Scrape on demand** with the button in the header — runs the full pipeline in the background with a live status pill
 - **Edit criteria** at `/config` — saves to `criteria.yaml` and re-scores every listing in the DB
 - **Auto-scrape scheduler** on `/config` — enable a background loop that re-runs the scrape every N minutes while the UI is open
+- **Map view** at `/map` — plot geocoded listings on OpenStreetMap (no API key); markers coloured by score (red→green gradient) with a status ring; live score range slider filters markers without a page reload; click any marker for a popup with price, score, status, and links
 
 ### Accessing from your phone (same Wi-Fi)
 
@@ -171,7 +172,8 @@ src/apartment_hunter/
     kijiji.py
     craigslist.py
   templates/                      # Jinja + HTMX + Tailwind CDN
-    base.html, index.html, listing.html, config.html
+    base.html, index.html, listing.html, config.html, map.html
+    _filters.html                 # shared filter bar (list + map)
     _card_status.html, _scrape_button.html, _star_button.html, _status_pill.html
 tests/                            # pytest
 scripts/run_hunter.bat            # Task Scheduler entry point

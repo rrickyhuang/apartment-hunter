@@ -1,0 +1,118 @@
+# Apartment Hunter — TODO
+
+---
+
+## Bugs
+
+### Map score gradient shows wrong colours / all 0.00
+`scoring.score()["total"]` is stored on a **0–100 scale** (`sum(...) * 100` in `scoring.py:121`).
+The map's `scoreFill()` in `map.html` clamps input to `[0, 1]`, so any score > 1 gets clamped to green.
+Most markers show 0.00 because listings that fail `passes_hard_filters` get `score = 0.0` stored in the DB —
+check whether criteria need retuning or a rescore is needed (Config → Save re-scores everything).
+
+**Fix options:**
+- Either normalise to 0–1 before storing (`/ 100` in `_rescore_all` in `web.py:205`)
+- Or change the map gradient to work on a 0–100 scale (update `scoreFill` thresholds + slider `max`)
+- Also update the map slider `max` attribute and legend labels to match whichever scale is chosen
+
+---
+
+## Scraper
+
+### Craigslist listings missing photos
+The craigslist scraper in `scrapers/craigslist.py:102–108` extracts image IDs from a JSON blob in the
+listing index page. These are often absent or fail silently — `image_map.get(post_id)` returns `None`.
+Options: load each listing's detail page to grab the first `<img>` in `.slide`, or fall back to a
+placeholder. Loading detail pages is slower but gives better coverage.
+
+---
+
+## Email / Alerting
+
+### Review and improve alert email format
+`alerter.py` sends an HTML digest via Gmail SMTP. Current format is minimal.
+Improvements to consider:
+- Clickable listing titles that link back to the local web UI (`http://localhost:5000/listing/…`)
+- Score bar or coloured badge per listing
+- "Mark as interested" one-click link (would need a token-based route in `web.py` since email clients
+  can't POST)
+- Group by score tier or neighbourhood
+- The email is triggered by `run.py` when `--dry-run` is NOT set; SMTP creds live in env vars
+  (`ALERT_FROM`, `ALERT_TO`, `ALERT_PASSWORD` — check `alerter.py:60–70`)
+
+---
+
+## Scoring
+
+### Review scoring criteria — does it reflect what I'm looking for?
+Scoring logic is in `scoring.py:113–122`. Sub-scores are: `price`, `location`, `size`, `amenities`.
+Weights are configured in `config/criteria.yaml` and must sum to 1.0.
+Things to audit:
+- `location` sub-score: how are preferred neighbourhoods matched? Fuzzy string match on `address`/`city`
+- `amenities` sub-score: what keywords trigger a match vs `nice_to_have` list in criteria.yaml?
+- `price` sub-score: is the gradient between `target_rent` and `max_rent` steep/shallow enough?
+- Run `SELECT score, title, price, address FROM listings ORDER BY score DESC LIMIT 20` to sanity-check
+  that top-scored listings actually look good
+- Config UI is at `/config` — saving re-scores all listings in the DB
+
+---
+
+## New Features
+
+### Email / text tool for contacting listings
+A template-based outreach composer. Rough design:
+- Button on the listing detail page (`/listing/<source>/<id>`) that opens a modal with a pre-filled
+  template (name, viewing availability, questions)
+- Templates stored in `config/` as plain text with `{{price}}`, `{{address}}` placeholders
+- "Copy to clipboard" is the safest first version; actual send (mailto: link or SMTP) as a follow-up
+- Could log outreach attempts to a new `contacts` table or reuse the `notes` field + status change
+
+### Track responses and manage viewings
+Builds on the existing `status` workflow (`new → interested → contacted → viewing → applied`).
+Ideas:
+- Add a `contacted_at` timestamp column (migration in `db.py:_migrate`)
+- Add a `viewing_at` datetime field for scheduled viewings
+- A `/viewings` page that lists upcoming viewings sorted by date
+- Response tracking: a `response` field (no response / positive / negative / ghosted)
+- Could integrate with the calendar (Google Calendar API or just an `.ics` export)
+
+### Persist filter state when switching between List and Map views
+Currently the query string is lost when navigating between `/` and `/map`.
+Options:
+- Store last-used filters in `localStorage` and restore them on page load
+- Pass the current query string as a param in the nav links (e.g. `/map?{{ request.query_string.decode() }}`)
+  — the simpler approach, already works since both views share `_filters.html` and `_parse_filters()`
+- Hybrid view (list + map side-by-side): feasible with CSS grid; map takes right half, card list scrolls
+  on the left; clicking a card flies the map to that marker
+
+---
+
+## Scraper Infrastructure
+
+### rentals_ca scraper — verify it's working
+The scraper was rewritten in commit `4c36e8d` to use HTML hydration (parsing the inline
+`App.store.search = {...}` GraphQL blob). The 0-row count seen during map planning was likely because
+a scrape hadn't been run since the rewrite, not because it's broken. Run a scrape and confirm rows
+appear under source = `rentals_ca`. If it's still returning 0, check whether the `response:` regex
+in `rentals_ca.py:24` still matches the current page structure.
+
+---
+
+## From This Session (unfinished / deferred)
+
+### Geocoding backfill (v2 of map view)
+Only rentfaster rows (~420 / 958) have lat/lng. craigslist and kijiji need geocoding from address.
+Deferred intentionally — map shipped with rentfaster-only markers.
+
+Plan:
+- Add a `geocode_cache(address_normalized TEXT PRIMARY KEY, lat REAL, lng REAL, geocoded_at TEXT, failed INTEGER)`
+  table so re-scrapes of the same address are free
+- Background daemon thread (mirror of `_scheduler_loop` in `web.py`) that geocodes rows where
+  `address IS NOT NULL AND lat IS NULL`, 1 req/sec (Nominatim hard rate limit)
+- Append `, Vancouver, BC, Canada` to disambiguate free-text craigslist/kijiji addresses
+- Store `geocoded_at` and a `geocode_failed` flag so failed addresses aren't retried forever
+- Nominatim usage policy: 1 req/sec, real User-Agent header, personal use only — if usage grows,
+  switch to a local Nominatim Docker container
+
+### Fix map score gradient scale mismatch
+See **Bugs** section above — identified this session, not yet fixed.

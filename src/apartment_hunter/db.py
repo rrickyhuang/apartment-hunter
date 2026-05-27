@@ -128,6 +128,7 @@ def query_listings(
     statuses: list[str] | None = None,
     sources: list[str] | None = None,
     min_score: float | None = None,
+    max_score: float | None = None,
     min_price: int | None = None,
     max_price: int | None = None,
     min_beds: float | None = None,
@@ -136,6 +137,7 @@ def query_listings(
     search: str | None = None,
     sort: str = "score_desc",
     limit: int = 500,
+    with_coords: bool = False,
 ) -> list[sqlite3.Row]:
     where = []
     params: list = []
@@ -143,6 +145,8 @@ def query_listings(
         where.append("hidden = 0")
     if starred_only:
         where.append("starred = 1")
+    if with_coords:
+        where.append("lat IS NOT NULL AND lng IS NOT NULL")
     if statuses:
         where.append(f"status IN ({','.join('?' * len(statuses))})")
         params.extend(statuses)
@@ -152,6 +156,9 @@ def query_listings(
     if min_score is not None:
         where.append("(score IS NULL OR score >= ?)")
         params.append(min_score)
+    if max_score is not None:
+        where.append("(score IS NULL OR score <= ?)")
+        params.append(max_score)
     if max_price is not None:
         where.append("(price IS NULL OR price <= ?)")
         params.append(max_price)

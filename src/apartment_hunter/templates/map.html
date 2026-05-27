@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Map · Apartment Hunter{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+
+{% include "_filters.html" %}
+
+<div class="flex items-center justify-between mb-3">
+  <h1 class="text-lg font-semibold">Map</h1>
+  <div id="map-meta" class="text-sm text-slate-500">loading…</div>
+</div>
+
+<div id="map" style="height: calc(100vh - 180px); border-radius: 8px; overflow: hidden;"></div>
+
+<script>
+(function () {
+  // Continuous red→yellow→green gradient across 0–1. Grey if unscored.
+  function scoreFill(score) {
+    if (score == null) return '#94a3b8';
+    const t = Math.max(0, Math.min(1, score));
+    // Two-segment: red→yellow (0–0.5), yellow→green (0.5–1)
+    let r, g, b = 0;
+    if (t < 0.5) {
+      const s = t / 0.5;
+      r = 239;
+      g = Math.round(68 + (234 - 68) * s);  // #ef4444 → #facc15
+    } else {
+      const s = (t - 0.5) / 0.5;
+      r = Math.round(250 + (34 - 250) * s);  // #facc15 → #22c55e
+      g = Math.round(204 + (197 - 204) * s);
+      b = Math.round(0   + (94  - 0)   * s);
+    }
+    return '#' + [r, g, b].map(x => Math.round(x).toString(16).padStart(2, '0')).join('');
+  }
+
+  // Stroke color mirrors the status-pill palette from base.html
+  const STATUS_COLOR = {
+    new:        '#9ca3af',
+    interested: '#3b82f6',
+    contacted:  '#f59e0b',
+    viewing:    '#d97706',
+    applied:    '#6366f1',
+    accepted:   '#10b981',
+    rejected:   '#ef4444',
+    archived:   '#d1d5db',
+  };
+  function statusStroke(status) {
+    return STATUS_COLOR[status] || '#9ca3af';
+  }
+
+  const map = L.map('map').setView([49.2827, -123.1207], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+
+  // Legend
+  const legend = L.control({ position: 'bottomright' });
+  legend.onAdd = () => {
+    const d = L.DomUtil.create('div');
+    d.style.cssText = 'background:#fff;padding:10px 12px;border-radius:6px;border:1px solid #e2e8f0;font-size:12px;line-height:1.7;min-width:140px';
+    d.innerHTML =
+      '<div style="font-weight:600;margin-bottom:4px">Score (fill)</div>' +
+      '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">' +
+        '<span style="font-size:11px;color:#64748b">0</span>' +
+        '<div style="flex:1;height:10px;border-radius:5px;background:linear-gradient(to right,#ef4444,#facc15,#22c55e)"></div>' +
+        '<span style="font-size:11px;color:#64748b">1</span>' +
+      '</div>' +
+      '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#94a3b8;margin-right:5px;vertical-align:middle"></span>unscored<br>' +
+      '<div style="font-weight:600;margin:6px 0 4px">Status (ring)</div>' +
+      Object.entries(STATUS_COLOR).map(([s, c]) =>
+        '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#fff;border:2.5px solid ' + c + ';margin-right:5px;vertical-align:middle"></span>' + s + '<br>'
+      ).join('');
+    return d;
+  };
+  legend.addTo(map);
+
+  // Score range control — lives on the map, filters markers without a page reload
+  const scoreControl = L.control({ position: 'topleft' });
+  scoreControl.onAdd = () => {
+    const d = L.DomUtil.create('div');
+    d.style.cssText = 'background:#fff;padding:10px 12px;border-radius:6px;border:1px solid #e2e8f0;font-size:12px;min-width:180px';
+    d.innerHTML =
+      '<div style="font-weight:600;margin-bottom:6px">Score filter</div>' +
+      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">' +
+        '<label style="color:#64748b;width:28px">min</label>' +
+        '<input id="score-min" type="range" min="0" max="1" step="0.01" value="0" style="flex:1">' +
+        '<span id="score-min-val" style="width:30px;text-align:right;color:#334155">0.00</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:6px">' +
+        '<label style="color:#64748b;width:28px">max</label>' +
+        '<input id="score-max" type="range" min="0" max="1" step="0.01" value="1" style="flex:1">' +
+        '<span id="score-max-val" style="width:30px;text-align:right;color:#334155">1.00</span>' +
+      '</div>';
+    // Prevent map drag/zoom when interacting with the control
+    L.DomEvent.disableClickPropagation(d);
+    L.DomEvent.disableScrollPropagation(d);
+    return d;
+  };
+  scoreControl.addTo(map);
+
+  const qs = {{ qs | tojson }};
+  const url = '/api/listings.geojson' + (qs ? ('?' + qs) : '');
+  const meta = document.getElementById('map-meta');
+
+  function makeMarker(f, latlng) {
+    const p = f.properties;
+    return L.circleMarker(latlng, {
+      radius: 8,
+      fillColor: scoreFill(p.score),
+      fillOpacity: 0.85,
+      color: statusStroke(p.status),
+      weight: 2.5,
+    });
+  }
+
+  function makePopup(f) {
+    const p = f.properties;
+    const price = p.price != null ? ('$' + p.price.toLocaleString()) : '—';
+    const score = p.score != null ? p.score.toFixed(2) : '—';
+    const beds  = p.beds  != null ? (p.beds + ' bd') : '';
+    const title = p.title ? p.title.replace(/</g, '&lt;') : '(no title)';
+    const scoreColor = scoreFill(p.score);
+    const statusColor = statusStroke(p.status);
+    return (
+      '<div style="min-width:210px">' +
+      '<div style="font-weight:600;margin-bottom:4px">' + title + '</div>' +
+      '<div style="font-size:13px;color:#475569">' + price + (beds ? ' · ' + beds : '') + '</div>' +
+      '<div style="margin-top:4px;font-size:13px;display:flex;gap:8px;align-items:center">' +
+        '<span style="background:' + scoreColor + ';color:#fff;font-weight:700;padding:1px 7px;border-radius:999px;font-size:12px">score ' + score + '</span>' +
+        '<span style="border:2px solid ' + statusColor + ';color:' + statusColor + ';font-weight:600;padding:1px 7px;border-radius:999px;font-size:12px">' + (p.status || 'new') + '</span>' +
+      '</div>' +
+      '<div style="margin-top:8px;font-size:12px">' +
+        '<a href="' + p.detail_url + '" style="color:#2563eb;text-decoration:underline">details</a>' +
+        ' &nbsp;·&nbsp; ' +
+        '<a href="' + p.url + '" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:underline">source ↗</a>' +
+      '</div>' +
+      '</div>'
+    );
+  }
+
+  fetch(url).then(r => r.json()).then(data => {
+    const allFeatures = data.features || [];
+    if (allFeatures.length === 0) {
+      meta.textContent = '0 listings with coordinates';
+      return;
+    }
+
+    let layer = null;
+
+    function applyScoreFilter(minS, maxS) {
+      if (layer) map.removeLayer(layer);
+      const filtered = allFeatures.filter(f => {
+        const s = f.properties.score;
+        if (s == null) return true;  // always show unscored
+        return s >= minS && s <= maxS;
+      });
+      meta.textContent = filtered.length + ' / ' + allFeatures.length + ' listings';
+      layer = L.geoJSON({ type: 'FeatureCollection', features: filtered }, {
+        pointToLayer: makeMarker,
+        onEachFeature: (f, lyr) => lyr.bindPopup(makePopup(f)),
+      }).addTo(map);
+    }
+
+    // Wire up sliders
+    const minSlider = document.getElementById('score-min');
+    const maxSlider = document.getElementById('score-max');
+    const minVal    = document.getElementById('score-min-val');
+    const maxVal    = document.getElementById('score-max-val');
+
+    function onSlider() {
+      let lo = parseFloat(minSlider.value);
+      let hi = parseFloat(maxSlider.value);
+      if (lo > hi) { lo = hi; minSlider.value = lo; }
+      minVal.textContent = lo.toFixed(2);
+      maxVal.textContent = hi.toFixed(2);
+      applyScoreFilter(lo, hi);
+    }
+    minSlider.addEventListener('input', onSlider);
+    maxSlider.addEventListener('input', onSlider);
+
+    applyScoreFilter(0, 1);
+    map.fitBounds(layer.getBounds(), { padding: [30, 30] });
+  }).catch(err => {
+    meta.textContent = 'failed to load listings';
+    console.error(err);
+  });
+})();
+</script>
+{% endblock %}

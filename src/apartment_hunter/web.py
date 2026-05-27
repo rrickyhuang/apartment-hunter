@@ -244,6 +244,56 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
             return str(int(v))
         return f"{v:.{places}f}"
 
+    def _parse_filters():
+        """Pull the standard listing filters off request.args. Shared by
+        the list view and the map's GeoJSON endpoint so both honor the
+        same query string."""
+        status_filter = request.args.getlist("status")
+        source_filter = request.args.getlist("source")
+        sort = request.args.get("sort", "score_desc")
+        show_hidden = request.args.get("hidden") == "1"
+        starred_only = request.args.get("starred") == "1"
+        show_nonviable = request.args.get("nonviable") == "1"
+        search = request.args.get("q", "").strip() or None
+
+        criteria_min_rent = None
+        if not show_nonviable:
+            try:
+                cfg = _load_criteria_yaml()
+                criteria_min_rent = int(cfg.get("hard_filters", {}).get("min_rent") or 0) or None
+            except Exception as e:
+                log.warning("could not read criteria for min_rent filter: %s", e)
+        try:
+            min_score = float(request.args.get("min_score", "0") or 0)
+        except ValueError:
+            min_score = 0
+        try:
+            max_score = float(request.args["max_score"]) if request.args.get("max_score") else None
+        except ValueError:
+            max_score = None
+        try:
+            max_price = int(request.args["max_price"]) if request.args.get("max_price") else None
+        except ValueError:
+            max_price = None
+        try:
+            min_beds = float(request.args["min_beds"]) if request.args.get("min_beds") else None
+        except ValueError:
+            min_beds = None
+        return {
+            "status_filter": status_filter,
+            "source_filter": source_filter,
+            "sort": sort,
+            "show_hidden": show_hidden,
+            "starred_only": starred_only,
+            "show_nonviable": show_nonviable,
+            "search": search,
+            "criteria_min_rent": criteria_min_rent,
+            "min_score": min_score,
+            "max_score": max_score,
+            "max_price": max_price,
+            "min_beds": min_beds,
+        }
+
     @app.route("/")
     def index():
         conn = get_conn()
@@ -270,6 +320,10 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
         except ValueError:
             min_score = 0
         try:
+            max_score = float(request.args["max_score"]) if request.args.get("max_score") else None
+        except ValueError:
+            max_score = None
+        try:
             max_price = int(request.args["max_price"]) if request.args.get("max_price") else None
         except ValueError:
             max_price = None
@@ -283,6 +337,7 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
             statuses=status_filter or None,
             sources=source_filter or None,
             min_score=min_score,
+            max_score=max_score,
             min_price=criteria_min_rent,
             max_price=max_price,
             min_beds=min_beds,
@@ -306,6 +361,7 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
             starred_only=starred_only,
             search=search or "",
             min_score=min_score,
+            max_score=max_score or "",
             max_price=max_price or "",
             min_beds=min_beds if min_beds is not None else "",
         )
@@ -459,6 +515,73 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
             abort(404)
         db.set_hidden(conn, source, external_id, not bool(row["hidden"]))
         return "", 204
+
+    @app.route("/map")
+    def map_view():
+        # Page itself carries no listing data — markers are fetched via
+        # /api/listings.geojson so we can stream the same query-string
+        # filters the list view uses.
+        conn = get_conn()
+        f = _parse_filters()
+        return render_template(
+            "map.html",
+            qs=request.query_string.decode(),
+            statuses=db.STATUSES,
+            status_counts=db.status_counts(conn),
+            source_counts=db.source_counts(conn),
+            status_filter=f["status_filter"],
+            source_filter=f["source_filter"],
+            sort=f["sort"],
+            show_hidden=f["show_hidden"],
+            show_nonviable=f["show_nonviable"],
+            criteria_min_rent=f["criteria_min_rent"],
+            starred_only=f["starred_only"],
+            search=f["search"] or "",
+            min_score=f["min_score"],
+            max_score=f["max_score"] or "",
+            max_price=f["max_price"] or "",
+            min_beds=f["min_beds"] if f["min_beds"] is not None else "",
+        )
+
+    @app.route("/api/listings.geojson")
+    def listings_geojson():
+        conn = get_conn()
+        f = _parse_filters()
+        rows = db.query_listings(
+            conn,
+            statuses=f["status_filter"] or None,
+            sources=f["source_filter"] or None,
+            min_score=f["min_score"],
+            max_score=f["max_score"],
+            min_price=f["criteria_min_rent"],
+            max_price=f["max_price"],
+            min_beds=f["min_beds"],
+            show_hidden=f["show_hidden"],
+            starred_only=f["starred_only"],
+            search=f["search"],
+            sort=f["sort"],
+            limit=2000,
+            with_coords=True,
+        )
+        features = []
+        for r in rows:
+            features.append({
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [r["lng"], r["lat"]]},
+                "properties": {
+                    "source": r["source"],
+                    "external_id": r["external_id"],
+                    "title": r["title"],
+                    "price": r["price"],
+                    "beds": r["beds"],
+                    "score": r["score"],
+                    "url": r["url"],
+                    "detail_url": url_for("detail", source=r["source"], external_id=r["external_id"]),
+                    "status": r["status"],
+                    "starred": bool(r["starred"]),
+                },
+            })
+        return {"type": "FeatureCollection", "features": features}
 
     return app
 
