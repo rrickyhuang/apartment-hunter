@@ -259,12 +259,15 @@ def upsert(conn: sqlite3.Connection, listing: Listing) -> bool:
     return not existed
 
 
-def set_score(conn: sqlite3.Connection, source: str, external_id: str, score: float) -> None:
+def set_score(
+    conn: sqlite3.Connection, source: str, external_id: str, score: float, commit: bool = True
+) -> None:
     conn.execute(
         "UPDATE listings SET score=? WHERE source=? AND external_id=?",
         (score, source, external_id),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def all_listings(conn: sqlite3.Connection) -> list[sqlite3.Row]:

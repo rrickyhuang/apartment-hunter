@@ -203,7 +203,8 @@ def _rescore_all(conn, criteria: Criteria) -> int:
         adapter = _RowAsListing(r, amens)
         ok, _ = passes_hard_filters(adapter, criteria)
         s = score(adapter, criteria)["total"] if ok else 0.0
-        db.set_score(conn, r["source"], r["external_id"], s)
+        db.set_score(conn, r["source"], r["external_id"], s, commit=False)
+    conn.commit()
     return len(rows)
 
 
