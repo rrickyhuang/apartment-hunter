@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from . import db
 from .alerter import send_digest
 from .scoring import Criteria, passes_hard_filters, score
+from .settings import MissingEnvVar
 from .scrapers.craigslist import CraigslistScraper
 from .scrapers.kijiji import KijijiScraper
 from .scrapers.rentals_ca import RentalsCaScraper
@@ -95,8 +96,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             send_digest(rows, criteria.alert_threshold)
             db.mark_alerted(conn, [(r["source"], r["external_id"]) for r in rows])
-        except KeyError as e:
-            log.error("missing env var %s — did you fill in .env?", e)
+        except MissingEnvVar as e:
+            log.error("%s", e)
             return 2
         except Exception as e:
             log.exception("email send failed: %s", e)

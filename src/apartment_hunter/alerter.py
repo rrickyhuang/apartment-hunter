@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
-import os
 import smtplib
 import sqlite3
 from email.message import EmailMessage
 
 from jinja2 import Template
+
+from .settings import Settings
 
 log = logging.getLogger(__name__)
 
@@ -49,16 +50,14 @@ def send_digest(rows: list[sqlite3.Row], threshold: float) -> bool:
         log.info("no new listings above threshold; not sending email")
         return True
 
-    gmail_addr = os.environ["GMAIL_ADDRESS"]
-    gmail_pw = os.environ["GMAIL_APP_PASSWORD"]
-    recipient = os.environ.get("ALERT_TO", gmail_addr)
+    cfg = Settings.load()
 
     html = EMAIL_TEMPLATE.render(rows=rows, count=len(rows), threshold=int(threshold))
 
     msg = EmailMessage()
     msg["Subject"] = f"[apartment-hunter] {len(rows)} new match(es)"
-    msg["From"] = gmail_addr
-    msg["To"] = recipient
+    msg["From"] = cfg.gmail_address
+    msg["To"] = cfg.alert_to
     msg.set_content(
         "HTML email — open in an HTML-capable client. "
         "Listings:\n" + "\n".join(f"- {r['title']} ({r['url']})" for r in rows)
@@ -67,7 +66,7 @@ def send_digest(rows: list[sqlite3.Row], threshold: float) -> bool:
 
     with smtplib.SMTP("smtp.gmail.com", 587) as s:
         s.starttls()
-        s.login(gmail_addr, gmail_pw)
+        s.login(cfg.gmail_address, cfg.gmail_app_password)
         s.send_message(msg)
-    log.info("sent digest with %d listings to %s", len(rows), recipient)
+    log.info("sent digest with %d listings to %s", len(rows), cfg.alert_to)
     return True
