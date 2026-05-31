@@ -2,21 +2,6 @@
 
 ---
 
-## Bugs
-
-### Map score gradient shows wrong colours / all 0.00
-`scoring.score()["total"]` is stored on a **0–100 scale** (`sum(...) * 100` in `scoring.py:121`).
-The map's `scoreFill()` in `map.html` clamps input to `[0, 1]`, so any score > 1 gets clamped to green.
-Most markers show 0.00 because listings that fail `passes_hard_filters` get `score = 0.0` stored in the DB —
-check whether criteria need retuning or a rescore is needed (Config → Save re-scores everything).
-
-**Fix options:**
-- Either normalise to 0–1 before storing (`/ 100` in `_rescore_all` in `web.py:205`)
-- Or change the map gradient to work on a 0–100 scale (update `scoreFill` thresholds + slider `max`)
-- Also update the map slider `max` attribute and legend labels to match whichever scale is chosen
-
----
-
 ## Scraper
 
 ### Craigslist listings missing photos
@@ -139,6 +124,3 @@ Plan:
 - Store `geocoded_at` and a `geocode_failed` flag so failed addresses aren't retried forever
 - Nominatim usage policy: 1 req/sec, real User-Agent header, personal use only — if usage grows,
   switch to a local Nominatim Docker container
-
-### Fix map score gradient scale mismatch
-See **Bugs** section above — identified this session, not yet fixed.
