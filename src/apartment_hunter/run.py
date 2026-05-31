@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -76,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     s_total = 0.0
                 db.set_score(conn, listing.source, listing.external_id, s_total)
-            except Exception as e:
+            except (sqlite3.Error, KeyError, ValueError, TypeError) as e:
                 log.warning("upsert/score failed for %s: %s", listing.url, e)
 
     log.info("seen=%d new=%d", total_seen, total_new)
