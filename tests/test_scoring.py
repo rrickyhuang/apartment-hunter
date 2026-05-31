@@ -5,7 +5,12 @@ from pathlib import Path
 import pytest
 
 from apartment_hunter.models import Listing
-from apartment_hunter.scoring import Criteria, passes_hard_filters, score
+from apartment_hunter.scoring import (
+    Criteria,
+    _amenities_score,
+    passes_hard_filters,
+    score,
+)
 
 
 @pytest.fixture
@@ -63,3 +68,9 @@ def test_preferred_neighborhood_helps(criteria):
     pref = score(_listing(title="1BR in Kitsilano", address="Kitsilano Ave"), criteria)
     plain = score(_listing(title="1BR somewhere", address="Some St"), criteria)
     assert pref["location"] > plain["location"]
+
+
+def test_amenities_score_neutral_when_nice_to_have_empty():
+    # No nice_to_have list -> neutral 0.5, no ZeroDivisionError.
+    assert _amenities_score(_listing(), {}) == 0.5
+    assert _amenities_score(_listing(), {"nice_to_have": []}) == 0.5
