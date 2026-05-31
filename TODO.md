@@ -98,17 +98,6 @@ Options:
 
 ---
 
-## Scraper Infrastructure
-
-### rentals_ca scraper — verify it's working
-The scraper was rewritten in commit `4c36e8d` to use HTML hydration (parsing the inline
-`App.store.search = {...}` GraphQL blob). The 0-row count seen during map planning was likely because
-a scrape hadn't been run since the rewrite, not because it's broken. Run a scrape and confirm rows
-appear under source = `rentals_ca`. If it's still returning 0, check whether the `response:` regex
-in `rentals_ca.py:24` still matches the current page structure.
-
----
-
 ## From This Session (unfinished / deferred)
 
 ### Geocoding backfill (v2 of map view)
