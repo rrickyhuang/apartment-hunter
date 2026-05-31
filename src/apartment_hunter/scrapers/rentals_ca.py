@@ -42,6 +42,7 @@ class RentalsCaScraper(Scraper):
     def fetch(self) -> list[Listing]:
         out: list[Listing] = []
         seen: set[str] = set()
+        fetched = 0
         for page in range(1, self.max_pages + 1):
             url = PAGE_URL.format(slug=self.city_slug)
             params = {"page": page} if page > 1 else None
@@ -55,6 +56,7 @@ class RentalsCaScraper(Scraper):
 
             edges = data.get("data", {}).get("edges", []) or []
             page_info = data.get("data", {}).get("pageInfo", {}) or {}
+            fetched += len(edges)
 
             new_this_page = 0
             for edge in edges:
@@ -79,6 +81,10 @@ class RentalsCaScraper(Scraper):
             log.debug("rentals.ca page %d: %d edges, %d new kept", page, len(edges), new_this_page)
             if not page_info.get("hasNextPage"):
                 break
+        log.info(
+            "source=%s fetched=%d parsed=%d dropped=%d",
+            self.source, fetched, len(out), fetched - len(out),
+        )
         return out
 
     def _parse(self, node: dict[str, Any]) -> Listing:

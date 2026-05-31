@@ -57,18 +57,18 @@ class RentfasterScraper(Scraper):
                     all_items.append(it)
 
         listings: list[Listing] = []
-        dropped_non_bc = 0
         for item in all_items:
             city = (item.get("city") or "").strip().lower()
             if city and city not in ALLOWED_CITIES:
-                dropped_non_bc += 1
                 continue
             try:
                 listings.append(self._parse(item))
             except Exception as e:
                 log.debug("skipping malformed listing: %s", e)
-        if dropped_non_bc:
-            log.info("rentfaster: dropped %d listings outside metro Vancouver", dropped_non_bc)
+        log.info(
+            "source=%s fetched=%d parsed=%d dropped=%d",
+            self.source, len(all_items), len(listings), len(all_items) - len(listings),
+        )
         return listings
 
     def _parse(self, item: dict[str, Any]) -> Listing:

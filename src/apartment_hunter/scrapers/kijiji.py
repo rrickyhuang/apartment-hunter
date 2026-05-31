@@ -48,29 +48,30 @@ class KijijiScraper(Scraper):
     def fetch(self) -> list[Listing]:
         listings: list[Listing] = []
         seen: set[str] = set()
-        dropped = 0
+        fetched = 0
         for page in range(1, self.max_pages + 1):
             page_listings = self._fetch_page(page)
             if not page_listings:
                 break
+            fetched += len(page_listings)
             new_on_page = 0
             for listing in page_listings:
                 if listing.external_id in seen:
                     continue
                 seen.add(listing.external_id)
                 if listing.price is not None and listing.price < self.min_rent:
-                    dropped += 1
                     continue
                 blob = " ".join(filter(None, [listing.title, listing.description or ""]))
                 if JUNK_PATTERNS.search(blob):
-                    dropped += 1
                     continue
                 listings.append(listing)
                 new_on_page += 1
             if new_on_page == 0:
                 break  # paginated past the end
-        if dropped:
-            log.info("kijiji: dropped %d junk/short-term listings", dropped)
+        log.info(
+            "source=%s fetched=%d parsed=%d dropped=%d",
+            self.source, fetched, len(listings), fetched - len(listings),
+        )
         return listings
 
     def _fetch_page(self, page: int) -> list[Listing]:

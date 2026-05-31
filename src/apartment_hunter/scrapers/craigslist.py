@@ -43,7 +43,6 @@ class CraigslistScraper(Scraper):
         image_map = self._fetch_images()
         items = self._fetch_html_items()
         listings: list[Listing] = []
-        dropped_junk = 0
         for li in items:
             try:
                 listing = self._parse(li, image_map)
@@ -53,15 +52,15 @@ class CraigslistScraper(Scraper):
             if listing is None:
                 continue
             if listing.title and JUNK_PATTERNS.search(listing.title):
-                dropped_junk += 1
                 continue
             if listing.price is not None and listing.price < self.min_rent:
                 # < $500 is almost certainly a scam / deposit-as-price / by-the-week
-                dropped_junk += 1
                 continue
             listings.append(listing)
-        if dropped_junk:
-            log.info("craigslist: dropped %d junk/short-term listings", dropped_junk)
+        log.info(
+            "source=%s fetched=%d parsed=%d dropped=%d",
+            self.source, len(items), len(listings), len(items) - len(listings),
+        )
         return listings
 
     def _fetch_html_items(self) -> list:
