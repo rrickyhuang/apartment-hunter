@@ -202,8 +202,12 @@ def _rescore_all(conn, criteria: Criteria) -> int:
             amens = []
         adapter = _RowAsListing(r, amens)
         ok, _ = passes_hard_filters(adapter, criteria)
-        s = score(adapter, criteria)["total"] if ok else 0.0
-        db.set_score(conn, r["source"], r["external_id"], s, commit=False)
+        if ok:
+            sc = score(adapter, criteria)
+        else:
+            sc = {"total": 0.0, "price": 0.0, "location": 0.0, "size": 0.0, "amenities": 0.0}
+        sub = {k: sc[k] for k in ("price", "location", "size", "amenities")}
+        db.set_score(conn, r["source"], r["external_id"], sc["total"], sub=sub, commit=False)
     conn.commit()
     return len(rows)
 

@@ -74,10 +74,11 @@ def main(argv: list[str] | None = None) -> int:
                     total_new += 1
                 ok, _ = passes_hard_filters(listing, criteria)
                 if ok:
-                    s_total = score(listing, criteria)["total"]
+                    sc = score(listing, criteria)
                 else:
-                    s_total = 0.0
-                db.set_score(conn, listing.source, listing.external_id, s_total)
+                    sc = {"total": 0.0, "price": 0.0, "location": 0.0, "size": 0.0, "amenities": 0.0}
+                sub = {k: sc[k] for k in ("price", "location", "size", "amenities")}
+                db.set_score(conn, listing.source, listing.external_id, sc["total"], sub=sub)
             except (sqlite3.Error, KeyError, ValueError, TypeError) as e:
                 log.warning("upsert/score failed for %s: %s", listing.url, e)
 

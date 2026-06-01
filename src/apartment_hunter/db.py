@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS listings (
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
     score REAL,
+    score_price REAL,
+    score_location REAL,
+    score_size REAL,
+    score_amenities REAL,
     alerted INTEGER NOT NULL DEFAULT 0,
     raw TEXT,
     status TEXT NOT NULL DEFAULT 'new',
@@ -65,6 +69,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         ("hidden", "ALTER TABLE listings ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0"),
         ("status_updated_at", "ALTER TABLE listings ADD COLUMN status_updated_at TEXT"),
         ("starred", "ALTER TABLE listings ADD COLUMN starred INTEGER NOT NULL DEFAULT 0"),
+        ("score_price", "ALTER TABLE listings ADD COLUMN score_price REAL"),
+        ("score_location", "ALTER TABLE listings ADD COLUMN score_location REAL"),
+        ("score_size", "ALTER TABLE listings ADD COLUMN score_size REAL"),
+        ("score_amenities", "ALTER TABLE listings ADD COLUMN score_amenities REAL"),
     ]:
         if col not in cols:
             conn.execute(ddl)
@@ -260,12 +268,36 @@ def upsert(conn: sqlite3.Connection, listing: Listing) -> bool:
 
 
 def set_score(
-    conn: sqlite3.Connection, source: str, external_id: str, score: float, commit: bool = True
+    conn: sqlite3.Connection,
+    source: str,
+    external_id: str,
+    score: float,
+    sub: dict[str, float] | None = None,
+    commit: bool = True,
 ) -> None:
-    conn.execute(
-        "UPDATE listings SET score=? WHERE source=? AND external_id=?",
-        (score, source, external_id),
-    )
+    """Persist the total score and, when `sub` is given, the per-component
+    sub-scores (price/location/size/amenities, each 0-1)."""
+    if sub is None:
+        conn.execute(
+            "UPDATE listings SET score=? WHERE source=? AND external_id=?",
+            (score, source, external_id),
+        )
+    else:
+        conn.execute(
+            """UPDATE listings SET
+                score=?, score_price=?, score_location=?,
+                score_size=?, score_amenities=?
+               WHERE source=? AND external_id=?""",
+            (
+                score,
+                sub.get("price"),
+                sub.get("location"),
+                sub.get("size"),
+                sub.get("amenities"),
+                source,
+                external_id,
+            ),
+        )
     if commit:
         conn.commit()
 
