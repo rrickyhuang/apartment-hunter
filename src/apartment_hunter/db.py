@@ -56,7 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_starred ON listings(starred);
 # Statuses the UI cycles through. Order matters — used for filter pills.
 STATUSES = [
     "new", "interested", "contacted", "viewing",
-    "applied", "accepted", "rejected", "archived",
+    "applied", "accepted", "rejected", "not_interested",
 ]
 
 
@@ -76,6 +76,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     ]:
         if col not in cols:
             conn.execute(ddl)
+    # Rename the legacy 'archived' status to 'not_interested' (one-time data fix).
+    if conn.execute("SELECT 1 FROM listings WHERE status='archived' LIMIT 1").fetchone():
+        conn.execute("UPDATE listings SET status='not_interested' WHERE status='archived'")
     conn.commit()
 
 

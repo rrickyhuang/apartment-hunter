@@ -49,7 +49,7 @@ What you can do:
 - **Star** favorites and toggle a starred-only view
 - **Hide non-viable** listings (anything below `min_rent`) — on by default, with a toggle to show them
 - **Click any card** for full details, photo, amenities, and a link to the original listing
-- **Set status** per listing: `new → interested → contacted → viewing → applied → accepted/rejected/archived`
+- **Set status** per listing: `new → interested → contacted → viewing → applied → accepted/rejected/not_interested`
 - **Add notes** that autosave as you type (great for "called landlord, awaiting reply" or "Sat 2pm viewing")
 - **Hide** scams or noise without deleting them (toggle "Show hidden" to bring back)
 - **Scrape on demand** with the button in the header — runs the full pipeline in the background with a live status pill
