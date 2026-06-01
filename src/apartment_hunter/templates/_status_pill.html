@@ -1,14 +1,13 @@
-<form
-  hx-post="/listing/{{ row.source }}/{{ row.external_id }}/status"
-  hx-target="#status-pill"
-  hx-swap="innerHTML"
-  class="flex items-center gap-2"
->
-  <span class="status-pill status-{{ row.status }}">{{ row.status }}</span>
-  <select name="status" class="ml-auto px-2 py-1 border rounded text-sm"
-          hx-trigger="change" hx-include="closest form">
-    {% for s in statuses %}
-      <option value="{{ s }}" {% if s==row.status %}selected{% endif %}>{{ s }}</option>
-    {% endfor %}
-  </select>
-</form>
+<div class="flex flex-wrap gap-1.5">
+  {% for s in statuses %}
+    <button
+      type="button"
+      hx-post="/listing/{{ row.source }}/{{ row.external_id }}/status"
+      hx-vals='{"status": "{{ s }}"}'
+      hx-target="#status-pill"
+      hx-swap="innerHTML"
+      class="text-xs font-medium px-2.5 py-1 rounded-full border cursor-pointer transition
+             {% if s == row.status %}status-{{ s }} border-transparent ring-2 ring-offset-1 ring-slate-700{% else %}bg-white text-slate-500 border-slate-300 hover:border-slate-400 hover:text-slate-700{% endif %}"
+    >{{ s }}</button>
+  {% endfor %}
+</div>
