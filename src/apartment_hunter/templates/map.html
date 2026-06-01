@@ -47,11 +47,20 @@
     applied:    '#6366f1',
     accepted:   '#10b981',
     rejected:   '#ef4444',
-    archived:   '#d1d5db',
+    not_interested: '#d1d5db',
   };
   function statusStroke(status) {
     return STATUS_COLOR[status] || '#9ca3af';
   }
+  // not_interested markers are drawn as faint "ghosts" so they recede.
+  function markerOpacities(status) {
+    return status === 'not_interested'
+      ? { opacity: 0.35, fillOpacity: 0.2 }
+      : { opacity: 1,    fillOpacity: 0.85 };
+  }
+
+  const STATUSES = {{ statuses | tojson }};
+  const markerIndex = {};  // keyed by feature._mid
 
   const map = L.map('map').setView([49.2827, -123.1207], 12);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -104,18 +113,50 @@
   };
   scoreControl.addTo(map);
 
+  // Change a listing's status straight from its map popup (no detail view).
+  // The <select> uses an inline onchange so there's no popupopen wiring race,
+  // and we look the marker up by its stable _mid (no attribute escaping).
+  window.setMarkerStatus = function (sel) {
+    const entry = markerIndex[sel.dataset.mid];
+    if (!entry) return;
+    const status = sel.value;
+    const props = entry.feature.properties;
+    sel.disabled = true;
+    fetch('/listing/' + encodeURIComponent(props.source) + '/' + encodeURIComponent(props.external_id) + '/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ status: status }),
+    }).then(function (r) {
+      if (!r.ok) throw new Error('status update failed');
+      props.status = status;
+      const o = markerOpacities(status);
+      entry.layer.setStyle({ color: statusStroke(status), opacity: o.opacity, fillOpacity: o.fillOpacity });
+      // Rebuild the popup HTML so a later reopen reflects the saved status —
+      // Leaflet caches the string bound at bindPopup() time otherwise.
+      entry.layer.setPopupContent(makePopup(entry.feature));
+    }).catch(function (err) {
+      console.error(err);
+      alert('Could not update status');
+      sel.value = props.status || 'new';  // revert the control on failure
+    }).finally(function () {
+      sel.disabled = false;
+    });
+  };
+
   const qs = {{ qs | tojson }};
   const url = '/api/listings.geojson' + (qs ? ('?' + qs) : '');
   const meta = document.getElementById('map-meta');
 
   function makeMarker(f, latlng) {
     const p = f.properties;
+    const o = markerOpacities(p.status);
     return L.circleMarker(latlng, {
       radius: 8,
       fillColor: scoreFill(p.score),
-      fillOpacity: 0.85,
+      fillOpacity: o.fillOpacity,
       color: statusStroke(p.status),
       weight: 2.5,
+      opacity: o.opacity,
     });
   }
 
@@ -133,10 +174,16 @@
       '<div style="font-size:13px;color:#475569">' + price + (beds ? ' · ' + beds : '') + '</div>' +
       '<div style="margin-top:4px;font-size:13px;display:flex;gap:8px;align-items:center">' +
         '<span style="background:' + scoreColor + ';color:#fff;font-weight:700;padding:1px 7px;border-radius:999px;font-size:12px">score ' + score + '</span>' +
-        '<span style="border:2px solid ' + statusColor + ';color:' + statusColor + ';font-weight:600;padding:1px 7px;border-radius:999px;font-size:12px">' + (p.status || 'new') + '</span>' +
+        '<span class="popup-status-badge" style="border:2px solid ' + statusColor + ';color:' + statusColor + ';font-weight:600;padding:1px 7px;border-radius:999px;font-size:12px">' + (p.status || 'new') + '</span>' +
+      '</div>' +
+      '<div style="margin-top:8px;font-size:12px;display:flex;align-items:center;gap:6px">' +
+        '<label style="color:#64748b">status</label>' +
+        '<select class="popup-status" data-mid="' + f._mid + '" onchange="window.setMarkerStatus(this)" style="font-size:12px;padding:2px 4px;border:1px solid #cbd5e1;border-radius:4px">' +
+          STATUSES.map(function (s) { return '<option value="' + s + '"' + (s === (p.status || 'new') ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
+        '</select>' +
       '</div>' +
       '<div style="margin-top:8px;font-size:12px">' +
-        '<a href="' + p.detail_url + '" style="color:#2563eb;text-decoration:underline">details</a>' +
+        '<a href="' + p.detail_url + '" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:underline">details ↗</a>' +
         ' &nbsp;·&nbsp; ' +
         '<a href="' + p.url + '" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:underline">source ↗</a>' +
       '</div>' +
@@ -150,6 +197,8 @@
       meta.textContent = '0 listings with coordinates';
       return;
     }
+    // Stable per-feature id used to find a marker again after a status change.
+    allFeatures.forEach(function (f, i) { f._mid = i; });
 
     let layer = null;
 
@@ -161,9 +210,13 @@
         return s >= minS && s <= maxS;
       });
       meta.textContent = filtered.length + ' / ' + allFeatures.length + ' listings';
+      for (const k in markerIndex) delete markerIndex[k];
       layer = L.geoJSON({ type: 'FeatureCollection', features: filtered }, {
         pointToLayer: makeMarker,
-        onEachFeature: (f, lyr) => lyr.bindPopup(makePopup(f)),
+        onEachFeature: (f, lyr) => {
+          markerIndex[f._mid] = { layer: lyr, feature: f };
+          lyr.bindPopup(makePopup(f));
+        },
       }).addTo(map);
     }
 
