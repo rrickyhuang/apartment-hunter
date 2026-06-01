@@ -8,6 +8,7 @@ from apartment_hunter.models import Listing
 from apartment_hunter.scoring import (
     Criteria,
     _amenities_score,
+    _location_score,
     passes_hard_filters,
     score,
 )
@@ -74,3 +75,53 @@ def test_amenities_score_neutral_when_nice_to_have_empty():
     # No nice_to_have list -> neutral 0.5, no ZeroDivisionError.
     assert _amenities_score(_listing(), {}) == 0.5
     assert _amenities_score(_listing(), {"nice_to_have": []}) == 0.5
+
+
+def test_location_no_pref_is_neutral():
+    assert _location_score(_listing(), {}) == 0.5
+    assert _location_score(_listing(), {"preferred_neighborhoods": []}) == 0.5
+
+
+def test_location_token_match_hits_full_phrase():
+    prefs = {"preferred_neighborhoods": ["Mount Pleasant"]}
+    l = _listing(
+        title="Bright 1BR in Mount Pleasant",
+        address="123 Quebec St",
+        description="",
+    )
+    assert _location_score(l, prefs) == pytest.approx(0.8)
+
+
+def test_location_partial_phrase_does_not_match():
+    # Contains "mount" but not the full "Mount Pleasant" phrase.
+    prefs = {"preferred_neighborhoods": ["Mount Pleasant"]}
+    l = _listing(
+        title="Unit with mountain views",
+        address="500 Mountainside Rd",
+        description="",
+    )
+    assert _location_score(l, prefs) == 0.3
+
+
+def test_location_no_substring_false_positive():
+    # "Main" must not match inside "remaining" the way substring matching would.
+    prefs = {"preferred_neighborhoods": ["Main"]}
+    l = _listing(
+        title="One parking spot remaining",
+        address="42 Cambie St",
+        description="",
+    )
+    assert _location_score(l, prefs) == 0.3
+    # But it should match a real word-boundary occurrence.
+    hit = _listing(title="Loft on Main St", address="", description="")
+    assert _location_score(hit, prefs) == pytest.approx(0.8)
+
+
+def test_location_multiple_hits_stack():
+    prefs = {"preferred_neighborhoods": ["Kitsilano", "Mount Pleasant"]}
+    l = _listing(
+        title="Kitsilano gem near Mount Pleasant border",
+        address="",
+        description="",
+    )
+    assert _location_score(l, prefs) == pytest.approx(1.0)

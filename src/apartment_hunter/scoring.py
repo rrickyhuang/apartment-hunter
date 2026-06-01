@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -67,14 +68,32 @@ def _price_score(listing: Listing, prefs: dict[str, Any], hf: dict[str, Any]) ->
     return 1.0 - (listing.price - target) / (max_rent - target)
 
 
+def _tokens(s: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", s.lower())
+
+
+def _phrase_matches(phrase: str, tokens: list[str]) -> bool:
+    """True if the phrase's tokens appear as a contiguous run in `tokens`.
+    Token-based so "Mount Pleasant" won't match a stray "mount" or "mountain"."""
+    needle = _tokens(phrase)
+    if not needle:
+        return False
+    n = len(needle)
+    for i in range(len(tokens) - n + 1):
+        if tokens[i : i + n] == needle:
+            return True
+    return False
+
+
 def _location_score(listing: Listing, prefs: dict[str, Any]) -> float:
-    preferred = [n.lower() for n in prefs.get("preferred_neighborhoods", [])]
+    preferred = prefs.get("preferred_neighborhoods", [])
     if not preferred:
         return 0.5
     text = " ".join(
-        x.lower() for x in (listing.address, listing.title, listing.description) if x
+        x for x in (listing.address, listing.title, listing.description) if x
     )
-    hits = sum(1 for n in preferred if n in text)
+    tokens = _tokens(text)
+    hits = sum(1 for n in preferred if _phrase_matches(n, tokens))
     if hits == 0:
         return 0.3
     return min(1.0, 0.6 + 0.2 * hits)
