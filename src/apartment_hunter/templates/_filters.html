@@ -11,6 +11,8 @@
       <option value="newest"      {% if sort=='newest'    %}selected{% endif %}>Sort: newest</option>
     </select>
     <button class="px-4 py-2 bg-slate-900 text-white text-sm rounded-md">Apply</button>
+    <a href="{{ request.path }}"
+       class="px-4 py-2 border border-slate-300 text-slate-600 text-sm rounded-md hover:bg-slate-100">Reset</a>
   </div>
 
   <div class="flex flex-wrap items-center gap-3 text-sm">
@@ -43,7 +45,7 @@
       <label class="cursor-pointer">
         <input type="checkbox" name="status" value="{{ s }}" class="hidden peer"
                {% if s in status_filter %}checked{% endif %}>
-        <span class="status-pill status-{{ s }} peer-checked:ring-2 peer-checked:ring-slate-900">
+        <span class="source-pill">
           {{ s }} · {{ status_counts.get(s, 0) }}
         </span>
       </label>

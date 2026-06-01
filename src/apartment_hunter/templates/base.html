@@ -39,8 +39,9 @@
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
       <a href="/" class="text-lg font-semibold">🏠 Apartment Hunter</a>
       <nav class="text-sm flex items-center gap-4">
-        <a href="/" class="text-slate-500 hover:text-slate-900">Listings</a>
-        <a href="/map" class="text-slate-500 hover:text-slate-900">Map</a>
+        {% set _qs = request.query_string.decode() %}
+        <a href="/{% if _qs %}?{{ _qs }}{% endif %}" class="text-slate-500 hover:text-slate-900">Listings</a>
+        <a href="/map{% if _qs %}?{{ _qs }}{% endif %}" class="text-slate-500 hover:text-slate-900">Map</a>
         <a href="/config" class="text-slate-500 hover:text-slate-900">⚙ Criteria</a>
         {% include "_scrape_button.html" %}
       </nav>
