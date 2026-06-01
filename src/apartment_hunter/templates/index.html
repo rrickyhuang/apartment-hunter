@@ -8,7 +8,7 @@
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
   {% for r in rows %}
     <div class="bg-white rounded-lg border hover:shadow-md transition overflow-hidden flex flex-col relative group">
-      <a href="/listing/{{ r.source }}/{{ r.external_id }}" class="block">
+      <a href="/listing/{{ r.source }}/{{ r.external_id }}" target="_blank" rel="noopener" class="block">
         <div class="aspect-[4/3] bg-slate-100 relative">
           {% if r.image_url %}
             <img src="{{ r.image_url }}" alt="" class="w-full h-full object-cover" loading="lazy"
