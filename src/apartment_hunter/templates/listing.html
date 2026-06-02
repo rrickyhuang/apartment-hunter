@@ -28,11 +28,11 @@
     {# ── Photo carousel / grid ── #}
     {% if photos %}
       <div class="bg-white border rounded-lg overflow-hidden">
-        {# Hero image — clicking cycles to next #}
-        <div id="photo-hero" class="relative">
+        {# Hero image — click opens lightbox #}
+        <div id="photo-hero" class="relative bg-slate-900">
           <img id="hero-img" src="{{ photos[0] }}" alt=""
-               class="w-full max-h-[500px] object-cover cursor-pointer"
-               {% if photos|length > 1 %}title="Click to see next photo" onclick="cyclePhoto()"{% endif %}>
+               class="w-full max-h-[500px] object-contain cursor-zoom-in"
+               onclick="openLightbox(_cur)">
           {% if photos|length > 1 %}
             <span class="absolute bottom-2 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded"
                   id="photo-counter">1 / {{ photos|length }}</span>
@@ -44,26 +44,9 @@
             {% for photo in photos %}
               <img src="{{ photo }}" alt=""
                    class="h-16 w-24 object-cover rounded cursor-pointer flex-shrink-0 ring-2 {% if loop.index0 == 0 %}ring-slate-700{% else %}ring-transparent{% endif %} hover:ring-slate-400"
-                   onclick="selectPhoto({{ loop.index0 }}, this)">
+                   onclick="selectPhoto({{ loop.index0 }})">
             {% endfor %}
           </div>
-          <script>
-            var _photos = {{ photos | tojson }};
-            var _cur = 0;
-            function selectPhoto(idx, thumb) {
-              _cur = idx;
-              document.getElementById("hero-img").src = _photos[idx];
-              document.getElementById("photo-counter").textContent = (idx + 1) + " / " + _photos.length;
-              document.querySelectorAll("#photo-hero ~ div img").forEach(function(el, i) {
-                el.classList.toggle("ring-slate-700", i === idx);
-                el.classList.toggle("ring-transparent", i !== idx);
-              });
-            }
-            function cyclePhoto() {
-              var thumbs = document.querySelectorAll("#photo-hero ~ div img");
-              selectPhoto((_cur + 1) % _photos.length, thumbs[(_cur + 1) % _photos.length]);
-            }
-          </script>
         {% endif %}
       </div>
     {% else %}
@@ -71,6 +54,74 @@
         <div class="aspect-[16/9] flex items-center justify-center text-slate-400 bg-slate-100">no photo</div>
       </div>
     {% endif %}
+
+    {# ── Lightbox overlay ── #}
+    <div id="lightbox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90"
+         onclick="if(event.target===this)closeLightbox()">
+      <button onclick="closeLightbox()"
+              class="absolute top-4 right-4 text-white text-3xl leading-none hover:text-slate-300 select-none">✕</button>
+      <button id="lb-prev" onclick="lightboxNav(-1)"
+              class="absolute left-3 top-1/2 -translate-y-1/2 text-white text-4xl leading-none hover:text-slate-300 select-none px-2 hidden">‹</button>
+      <button id="lb-next" onclick="lightboxNav(1)"
+              class="absolute right-10 top-1/2 -translate-y-1/2 text-white text-4xl leading-none hover:text-slate-300 select-none px-2 hidden">›</button>
+      <img id="lb-img" src="" alt=""
+           class="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl">
+      <span id="lb-counter" class="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-sm hidden"></span>
+    </div>
+
+    <script>
+      var _photos = {{ photos | tojson }};
+      var _cur = 0;
+
+      function selectPhoto(idx) {
+        _cur = idx;
+        document.getElementById("hero-img").src = _photos[idx];
+        var counter = document.getElementById("photo-counter");
+        if (counter) counter.textContent = (idx + 1) + " / " + _photos.length;
+        document.querySelectorAll("#photo-hero ~ div img").forEach(function(el, i) {
+          el.classList.toggle("ring-slate-700", i === idx);
+          el.classList.toggle("ring-transparent", i !== idx);
+        });
+      }
+
+      function openLightbox(idx) {
+        _cur = idx;
+        var lb = document.getElementById("lightbox");
+        lb.classList.remove("hidden");
+        lb.classList.add("flex");
+        _updateLightbox();
+        document.addEventListener("keydown", _lbKey);
+      }
+
+      function closeLightbox() {
+        var lb = document.getElementById("lightbox");
+        lb.classList.add("hidden");
+        lb.classList.remove("flex");
+        document.removeEventListener("keydown", _lbKey);
+      }
+
+      function lightboxNav(dir) {
+        _cur = (_cur + dir + _photos.length) % _photos.length;
+        _updateLightbox();
+        selectPhoto(_cur);
+      }
+
+      function _updateLightbox() {
+        document.getElementById("lb-img").src = _photos[_cur];
+        var multi = _photos.length > 1;
+        document.getElementById("lb-prev").classList.toggle("hidden", !multi);
+        document.getElementById("lb-next").classList.toggle("hidden", !multi);
+        var ctr = document.getElementById("lb-counter");
+        ctr.classList.toggle("hidden", !multi);
+        if (multi) ctr.textContent = (_cur + 1) + " / " + _photos.length;
+      }
+
+      function _lbKey(e) {
+        if (e.key === "Escape") closeLightbox();
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") lightboxNav(1);
+        if (e.key === "ArrowLeft"  || e.key === "ArrowUp")   lightboxNav(-1);
+      }
+    </script>
 
     {# ── Core info card ── #}
     <div class="bg-white border rounded-lg p-5">
