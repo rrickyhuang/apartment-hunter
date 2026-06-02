@@ -9,7 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from . import db
-from .alerter import send_digest
+from .alerter import render_digest, send_digest
 from .scoring import Criteria, passes_hard_filters, score
 from .settings import MissingEnvVar
 from .scrapers.craigslist import CraigslistScraper
@@ -42,6 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="apartment_hunter")
     p.add_argument("--once", action="store_true", help="run a single scrape cycle (default)")
     p.add_argument("--dry-run", action="store_true", help="don't send email; print top 10")
+    p.add_argument("--print-email", action="store_true", help="render email HTML to data/email_preview.html and print the path")
     p.add_argument("--config", default=str(DEFAULT_CONFIG))
     p.add_argument("--db", default=str(DEFAULT_DB))
     p.add_argument("-v", "--verbose", action="store_true")
@@ -86,6 +87,12 @@ def main(argv: list[str] | None = None) -> int:
 
     rows = db.unalerted_above(conn, criteria.alert_threshold)
     log.info("%d unalerted listings at/above threshold %.0f", len(rows), criteria.alert_threshold)
+
+    if args.print_email:
+        html = render_digest(rows, criteria.alert_threshold)
+        out = Path(args.db).parent / "email_preview.html"
+        out.write_text(html, encoding="utf-8")
+        print(f"\nEmail preview ({len(rows)} listings) written to: {out}")
 
     if args.dry_run:
         print(f"\nTop {min(10, len(rows))} unalerted (dry run, no email):")
