@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     load_dotenv(PROJECT_ROOT / ".env")
 
     criteria = Criteria.load(args.config)
-    conn = db.connect(args.db)
+    conn = db.init_db(args.db)
     scrapers = build_scrapers(criteria)
 
     total_seen = 0

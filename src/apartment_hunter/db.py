@@ -82,15 +82,28 @@ def _migrate(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def connect(db_path: Path | str) -> sqlite3.Connection:
+def _open_conn(db_path: Path | str) -> sqlite3.Connection:
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(str(db_path), timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    return conn
+
+
+def init_db(db_path: Path | str) -> sqlite3.Connection:
+    """Create tables and run migrations. Call once at process startup."""
+    conn = _open_conn(db_path)
     conn.executescript(TABLE_DDL)
     _migrate(conn)
     conn.executescript(INDEX_DDL)
     return conn
+
+
+def connect(db_path: Path | str) -> sqlite3.Connection:
+    """Open a connection to an already-initialised DB (no DDL)."""
+    return _open_conn(db_path)
 
 
 def set_status(conn: sqlite3.Connection, source: str, external_id: str, status: str) -> None:

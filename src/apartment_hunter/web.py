@@ -216,6 +216,8 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
     app = Flask(__name__)
     app.config["DB_PATH"] = str(db_path)
 
+    db.init_db(db_path)  # create tables / run migrations once at startup
+
     global _scheduler_started
     if not _scheduler_started:
         _scheduler_started = True
