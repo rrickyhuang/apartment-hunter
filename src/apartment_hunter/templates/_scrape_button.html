@@ -14,21 +14,42 @@
       Scraping… {{ scrape_state.elapsed }}s
     </span>
   {% elif scrape_state.error %}
-    <button
-      hx-post="/scrape" hx-target="#scrape-btn" hx-swap="outerHTML"
-      class="px-3 py-1.5 bg-red-50 text-red-700 border border-red-300 rounded text-sm hover:bg-red-100"
-      title="Last run errored: {{ scrape_state.error }}"
-    >⚠ Retry scrape</button>
+    <div class="flex flex-col gap-1">
+      <button
+        hx-post="/scrape" hx-target="#scrape-btn" hx-swap="outerHTML"
+        class="px-3 py-1.5 bg-red-50 text-red-700 border border-red-300 rounded text-sm hover:bg-red-100"
+      >⚠ Retry scrape</button>
+      <span class="text-xs text-red-600 max-w-xs leading-snug">{{ scrape_state.error }}</span>
+      {% if scrape_state.source_results %}
+        <div class="text-xs text-slate-500 leading-snug">
+          {% for src, r in scrape_state.source_results.items() %}
+            <span class="{% if r.get('error') %}text-red-500{% endif %}">
+              {{ src }}: {% if r.get('error') %}✗ {{ r.error }}{% else %}{{ r.fetched }} fetched, {{ r.new }} new{% if r.get('dropped') %}, {{ r.dropped }} dropped{% endif %}{% endif %}
+            </span><br>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
   {% elif scrape_state.just_finished %}
-    <span
-      class="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded text-sm border border-emerald-300"
+    <div class="flex flex-col gap-1"
       hx-get="/scrape/status"
       hx-trigger="load delay:4s"
       hx-target="#scrape-btn"
       hx-swap="outerHTML"
     >
-      ✅ Done{% if scrape_state.new_count %} — {{ scrape_state.new_count }} new{% endif %}
-    </span>
+      <span class="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded text-sm border border-emerald-300">
+        ✅ Done{% if scrape_state.new_count %} — {{ scrape_state.new_count }} new{% endif %}
+      </span>
+      {% if scrape_state.source_results %}
+        <div class="text-xs text-slate-500 leading-snug">
+          {% for src, r in scrape_state.source_results.items() %}
+            <span class="{% if r.get('error') %}text-red-500{% endif %}">
+              {{ src }}: {% if r.get('error') %}✗ {{ r.error }}{% else %}{{ r.fetched }} fetched, {{ r.new }} new{% if r.get('dropped') %}, {{ r.dropped }} dropped{% endif %}{% endif %}
+            </span><br>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
   {% else %}
     <button
       hx-post="/scrape" hx-target="#scrape-btn" hx-swap="outerHTML"

@@ -85,19 +85,37 @@ def _migrate(conn: sqlite3.Connection) -> None:
 def _open_conn(db_path: Path | str) -> sqlite3.Connection:
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    # timeout=30: Python-level retry on SQLITE_BUSY (cross-process lock waits).
     conn = sqlite3.connect(str(db_path), timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 
 def init_db(db_path: Path | str) -> sqlite3.Connection:
-    """Create tables and run migrations. Call once at process startup."""
+    """Create tables and run migrations.
+
+    Safe to call concurrently: DDL is skipped when tables already exist so no
+    exclusive lock is needed on a live DB. Falls back gracefully if the DB is
+    locked (tables are assumed to exist if another process has the DB open).
+    """
     conn = _open_conn(db_path)
-    conn.executescript(TABLE_DDL)
-    _migrate(conn)
-    conn.executescript(INDEX_DDL)
+    try:
+        table_exists = bool(conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='listings'"
+        ).fetchone())
+    except sqlite3.OperationalError:
+        log.warning("init_db: DB locked during schema check; assuming tables exist")
+        return conn
+
+    if not table_exists:
+        conn.executescript(TABLE_DDL)
+        conn.executescript(INDEX_DDL)
+
+    try:
+        _migrate(conn)
+    except sqlite3.OperationalError as e:
+        log.warning("init_db: migration check failed (non-fatal): %s", e)
+
     return conn
 
 

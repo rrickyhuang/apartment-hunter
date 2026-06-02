@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sqlite3
 import threading
 import time
 from pathlib import Path
@@ -72,10 +73,11 @@ class _RowAsListing:
 # render the button's current state.
 _scrape_state = {
     "running": False,
-    "started_at": None,    # epoch seconds when scrape began
-    "finished_at": None,   # epoch seconds when last scrape ended
-    "new_count": None,     # how many new listings the last scrape inserted
-    "error": None,         # last error message if any
+    "started_at": None,     # epoch seconds when scrape began
+    "finished_at": None,    # epoch seconds when last scrape ended
+    "new_count": None,      # how many new listings the last scrape inserted
+    "error": None,          # last error message if any
+    "source_results": {},   # {source: {fetched, new, dropped?, error?}}
     "refresh_pending": False,  # consumed once by /scrape/status to trigger HX-Refresh
 }
 _scrape_lock = threading.Lock()
@@ -93,39 +95,85 @@ _scheduler_lock = threading.Lock()
 
 
 def _run_scrape_thread(db_path: str) -> None:
-    """Runs the full scraper pipeline in dry-run mode (no email). Updates
-    _scrape_state so /scrape/status can report progress."""
-    # Import locally to avoid pulling scraper deps into the web import path
-    # before someone hits the button.
-    from .run import main as run_main
+    """Runs the full scraper pipeline. Updates _scrape_state for the UI.
 
-    # The /scrape route flipped `running` to True synchronously already, so we
-    # only need the pre-count here.
+    Calls scrapers directly (not via run.main) so it can use db.connect()
+    (no DDL) and report per-source results without going through sys.exit().
+    """
+    # Import locally to keep scraper deps out of the web startup path.
+    from .run import build_scrapers
+
+    source_results: dict[str, dict] = {}
+    failed_sources: list[str] = []
+    before: int | None = None
+    after: int | None = None
+
     try:
-        conn = db.connect(db_path)
+        criteria = Criteria.load(CRITERIA_PATH)
+    except Exception as e:
+        log.exception("scrape: failed to load criteria")
+        with _scrape_lock:
+            _scrape_state["running"] = False
+            _scrape_state["finished_at"] = time.time()
+            _scrape_state["error"] = f"criteria load failed: {e}"
+            _scrape_state["refresh_pending"] = True
+        return
+
+    conn = db.connect(db_path)
+    try:
         before = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
     except Exception:
-        before = None
-
-    try:
-        run_main(["--once", "--dry-run", "--db", db_path])
-    except SystemExit:
-        # run_main calls sys.exit when not via __main__; ignore here
         pass
-    except Exception as e:
-        with _scrape_lock:
-            _scrape_state["error"] = str(e)
+
+    for scraper in build_scrapers(criteria):
+        src = scraper.source
+        try:
+            items = scraper.fetch()
+        except Exception as e:
+            log.exception("scrape: %s fetch failed", src)
+            source_results[src] = {"error": str(e)}
+            failed_sources.append(src)
+            continue
+
+        new_count = 0
+        drop_count = 0
+        for listing in items:
+            try:
+                is_new = db.upsert(conn, listing)
+                if is_new:
+                    new_count += 1
+                ok, _ = passes_hard_filters(listing, criteria)
+                if ok:
+                    sc = score(listing, criteria)
+                else:
+                    sc = {"total": 0.0, "price": 0.0, "location": 0.0, "size": 0.0, "amenities": 0.0}
+                sub = {k: sc[k] for k in ("price", "location", "size", "amenities")}
+                db.set_score(conn, listing.source, listing.external_id, sc["total"], sub=sub)
+            except (sqlite3.Error, KeyError, ValueError, TypeError) as e:
+                log.warning("upsert/score failed for %s: %s", listing.url, e)
+                drop_count += 1
+        source_results[src] = {"fetched": len(items), "new": new_count}
+        if drop_count:
+            source_results[src]["dropped"] = drop_count
+        log.info("source=%s fetched=%d new=%d dropped=%d", src, len(items), new_count, drop_count)
 
     try:
-        conn = db.connect(db_path)
         after = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
     except Exception:
-        after = None
+        pass
+
+    error_msg: str | None = None
+    if failed_sources:
+        all_failed = len(failed_sources) == len(source_results)
+        verb = "All scrapers failed" if all_failed else "Scrapers failed"
+        error_msg = f"{verb}: {', '.join(failed_sources)}"
 
     with _scrape_lock:
         _scrape_state["running"] = False
         _scrape_state["finished_at"] = time.time()
         _scrape_state["refresh_pending"] = True
+        _scrape_state["source_results"] = source_results
+        _scrape_state["error"] = error_msg
         if before is not None and after is not None:
             _scrape_state["new_count"] = max(0, after - before)
 
