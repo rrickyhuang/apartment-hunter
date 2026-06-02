@@ -260,6 +260,34 @@ def _rescore_all(conn, criteria: Criteria) -> int:
     return len(rows)
 
 
+def _extract_photos(source: str, raw_json: str | None, image_url: str | None) -> list[str]:
+    """Return all photo URLs for a listing, source-aware, deduped."""
+    photos: list[str] = []
+    raw: dict = {}
+    if raw_json:
+        try:
+            raw = json.loads(raw_json)
+        except Exception:
+            pass
+
+    if source == "rentals_ca":
+        for img in raw.get("images") or []:
+            scales = img.get("scales") or []
+            if scales:
+                url = scales[-1].get("url") or scales[0].get("url")
+                if url and url not in photos:
+                    photos.append(url)
+    elif source == "rentfaster":
+        for key in ("thumb", "thumb2"):
+            u = raw.get(key)
+            if u and u not in photos:
+                photos.append(u)
+
+    if not photos and image_url:
+        photos.append(image_url)
+    return photos
+
+
 def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
     app = Flask(__name__)
     app.config["DB_PATH"] = str(db_path)
@@ -427,7 +455,8 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
         row = db.get_one(conn, source, external_id)
         if not row:
             abort(404)
-        return render_template("listing.html", row=row, statuses=db.STATUSES)
+        photos = _extract_photos(row["source"], row["raw"], row["image_url"])
+        return render_template("listing.html", row=row, statuses=db.STATUSES, photos=photos)
 
     @app.route("/listing/<source>/<external_id>/status", methods=["POST"])
     def update_status(source, external_id):

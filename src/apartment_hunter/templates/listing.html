@@ -24,14 +24,55 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
 
   <div class="lg:col-span-2 space-y-4">
-    <div class="bg-white border rounded-lg overflow-hidden">
-      {% if row.image_url %}
-        <img src="{{ row.image_url }}" alt="" class="w-full max-h-[500px] object-cover">
-      {% else %}
-        <div class="aspect-[16/9] flex items-center justify-center text-slate-400 bg-slate-100">no photo</div>
-      {% endif %}
-    </div>
 
+    {# ── Photo carousel / grid ── #}
+    {% if photos %}
+      <div class="bg-white border rounded-lg overflow-hidden">
+        {# Hero image — clicking cycles to next #}
+        <div id="photo-hero" class="relative">
+          <img id="hero-img" src="{{ photos[0] }}" alt=""
+               class="w-full max-h-[500px] object-cover cursor-pointer"
+               {% if photos|length > 1 %}title="Click to see next photo" onclick="cyclePhoto()"{% endif %}>
+          {% if photos|length > 1 %}
+            <span class="absolute bottom-2 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded"
+                  id="photo-counter">1 / {{ photos|length }}</span>
+          {% endif %}
+        </div>
+        {% if photos|length > 1 %}
+          {# Thumbnail strip #}
+          <div class="flex gap-1.5 p-2 overflow-x-auto bg-slate-50">
+            {% for photo in photos %}
+              <img src="{{ photo }}" alt=""
+                   class="h-16 w-24 object-cover rounded cursor-pointer flex-shrink-0 ring-2 {% if loop.index0 == 0 %}ring-slate-700{% else %}ring-transparent{% endif %} hover:ring-slate-400"
+                   onclick="selectPhoto({{ loop.index0 }}, this)">
+            {% endfor %}
+          </div>
+          <script>
+            var _photos = {{ photos | tojson }};
+            var _cur = 0;
+            function selectPhoto(idx, thumb) {
+              _cur = idx;
+              document.getElementById("hero-img").src = _photos[idx];
+              document.getElementById("photo-counter").textContent = (idx + 1) + " / " + _photos.length;
+              document.querySelectorAll("#photo-hero ~ div img").forEach(function(el, i) {
+                el.classList.toggle("ring-slate-700", i === idx);
+                el.classList.toggle("ring-transparent", i !== idx);
+              });
+            }
+            function cyclePhoto() {
+              var thumbs = document.querySelectorAll("#photo-hero ~ div img");
+              selectPhoto((_cur + 1) % _photos.length, thumbs[(_cur + 1) % _photos.length]);
+            }
+          </script>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="bg-white border rounded-lg overflow-hidden">
+        <div class="aspect-[16/9] flex items-center justify-center text-slate-400 bg-slate-100">no photo</div>
+      </div>
+    {% endif %}
+
+    {# ── Core info card ── #}
     <div class="bg-white border rounded-lg p-5">
       <div class="flex items-baseline justify-between gap-4 flex-wrap">
         <h1 class="text-2xl font-semibold">
@@ -89,6 +130,33 @@
       </div>
     </div>
 
+    {# ── Sub-score breakdown ── #}
+    {% set has_subscores = row.score_price is not none or row.score_location is not none
+                           or row.score_size is not none or row.score_amenities is not none %}
+    {% if has_subscores %}
+      <div class="bg-white border rounded-lg p-4">
+        <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Score Breakdown</div>
+        <div class="space-y-2.5">
+          {% for label, val in [('Price', row.score_price), ('Location', row.score_location),
+                                ('Size', row.score_size), ('Amenities', row.score_amenities)] %}
+            {% if val is not none %}
+              {% set pct = (val * 100) | int %}
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-slate-600">{{ label }}</span>
+                  <span class="text-slate-500 font-medium">{{ pct }}</span>
+                </div>
+                <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div class="h-full rounded-full transition-all"
+                       style="width: {{ pct }}%; background: hsl({{ pct * 1.2 }}, 60%, 45%)"></div>
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
     <div class="bg-white border rounded-lg p-4">
       <div class="text-xs uppercase tracking-wide text-slate-500 mb-2 flex justify-between">
         <span>Notes</span>
@@ -106,6 +174,9 @@
     </div>
 
     <div class="bg-white border rounded-lg p-4 text-xs text-slate-500 space-y-1">
+      {% if row.posted_at %}
+        <div>Posted: {{ row.posted_at[:16].replace('T',' ') }}</div>
+      {% endif %}
       <div>First seen: {{ row.first_seen_at[:16].replace('T',' ') }}</div>
       <div>Last seen:  {{ row.last_seen_at[:16].replace('T',' ') }}</div>
       {% if row.status_updated_at %}
