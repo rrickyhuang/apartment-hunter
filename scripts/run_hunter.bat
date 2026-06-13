@@ -2,7 +2,7 @@
 REM Apartment Hunter — invoked by Windows Task Scheduler.
 REM Logs appended to logs\run.log so you can inspect missed runs.
 
-cd /d "C:\Users\Ricky\Documents\CodingProjects\apartment hunter"
+cd /d "%~dp0.."
 
 if not exist logs mkdir logs
 

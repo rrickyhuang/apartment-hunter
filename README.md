@@ -15,6 +15,7 @@ Scrapes Vancouver-area rental listings from multiple sites, scores them against 
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+pip install -e .
 
 # 2. Configure secrets
 copy .env.example .env
@@ -103,7 +104,7 @@ Unregister-ScheduledTask -TaskName ApartmentHunter -Confirm:$false
 To recreate from scratch:
 
 ```powershell
-$action = New-ScheduledTaskAction -Execute 'C:\Users\Ricky\Documents\CodingProjects\apartment hunter\scripts\run_hunter.bat'
+$action = New-ScheduledTaskAction -Execute 'C:\path\to\your\apartment hunter\scripts\run_hunter.bat'
 $t1 = New-ScheduledTaskTrigger -Daily -At 9:00AM
 $t2 = New-ScheduledTaskTrigger -Daily -At 9:00PM
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
