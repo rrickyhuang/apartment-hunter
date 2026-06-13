@@ -1,4 +1,7 @@
-"""kijiji.ca apartments/condos scraper for Vancouver + metro.
+"""kijiji.ca apartments/condos scraper.
+
+Defaults to Greater Vancouver. Pass a different ``location_id`` and
+``location_slug`` pair to target another Kijiji market.
 
 Kijiji is the easiest high-volume rental source after rentfaster — the search
 page uses stable data-testid selectors. ~40 listings per page; we paginate.
@@ -31,18 +34,23 @@ JUNK_PATTERNS = re.compile(
 # Kijiji location category IDs (verified by probing search results):
 #   80003   = Greater Vancouver (covers Surrey, Delta, Langley, Burnaby, ...)
 #   1700287 = City of Vancouver only
-# Use 80003 for metro coverage.
+# Use 80003 for metro coverage. Find the ID for your city by browsing
+# kijiji.ca and reading the `l<number>` segment in the URL.
 GREATER_VANCOUVER_ID = 80003
+GREATER_VANCOUVER_SLUG = "greater-vancouver"
 
 
 class KijijiScraper(Scraper):
     source = "kijiji"
 
     def __init__(self, max_rent: int = 2000, min_rent: int = 500,
-                 location_id: int = GREATER_VANCOUVER_ID, max_pages: int = 5):
+                 location_id: int = GREATER_VANCOUVER_ID,
+                 location_slug: str = GREATER_VANCOUVER_SLUG,
+                 max_pages: int = 5):
         self.max_rent = max_rent
         self.min_rent = min_rent
         self.location_id = location_id
+        self.location_slug = location_slug
         self.max_pages = max_pages
 
     def fetch(self) -> list[Listing]:
@@ -77,7 +85,7 @@ class KijijiScraper(Scraper):
     def _fetch_page(self, page: int) -> list[Listing]:
         suffix = f"/page-{page}" if page > 1 else ""
         url = (
-            f"https://www.kijiji.ca/b-apartments-condos/greater-vancouver"
+            f"https://www.kijiji.ca/b-apartments-condos/{self.location_slug}"
             f"{suffix}/c37l{self.location_id}?ad=offering&price=__{self.max_rent}"
         )
         try:
@@ -162,6 +170,8 @@ class KijijiScraper(Scraper):
         )
 
 
+# Vancouver metro by default. Update this list to match your search region so
+# that the city field is populated correctly on scraped listings.
 _KNOWN_CITIES = [
     "Vancouver", "Burnaby", "Surrey", "Richmond", "New Westminster",
     "North Vancouver", "West Vancouver", "Coquitlam", "Port Coquitlam",

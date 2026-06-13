@@ -1,7 +1,7 @@
 [project]
 name = "apartment-hunter"
 version = "0.1.0"
-description = "Vancouver rental listing scraper, scorer, and alerter."
+description = "Rental listing scraper, scorer, and email alerter."
 requires-python = ">=3.11"
 
 [tool.setuptools.packages.find]

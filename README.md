@@ -2,8 +2,8 @@
 
 Scrapes Vancouver-area rental listings from multiple sites, scores them against your criteria, and emails you when high-scoring new listings appear.
 
-**Sources:** rentals.ca, rentfaster.ca, Kijiji, Vancouver Craigslist
-**Target:** Vancouver + metro, under $2000/mo
+**Sources:** rentals.ca, rentfaster.ca, Kijiji, Craigslist
+**Default search area:** Vancouver metro (fully configurable via `config/criteria.yaml` and scraper constructor args)
 **Scheduling:** Windows Task Scheduler (always-on) **and/or** an in-app scheduler (runs while the web UI is open)
 
 ---

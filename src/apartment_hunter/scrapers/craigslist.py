@@ -17,7 +17,7 @@ SQFT_RE = re.compile(r"(\d{3,5})\s*(?:ft²|ft2|sqft|sq\.?\s*ft)", re.I)
 POST_ID_RE = re.compile(r"/(\d{8,12})\.html")
 
 # Craigslist is high-noise. Drop listings whose title screams short-term /
-# vacation / sublet / room-rental — Ricky wants real apartments.
+# vacation / sublet / room-rental.
 JUNK_PATTERNS = re.compile(
     r"\b(short[\s-]?term|short[\s-]?stay|weekly|nightly|per night|monthly only|"
     r"vacation|airbnb|sublet|sublease|roommate|room ?mate|room for rent|"
@@ -172,6 +172,8 @@ class CraigslistScraper(Scraper):
         )
 
 
+# Vancouver metro by default. Update this list to match your search region so
+# that the city field is populated correctly on scraped listings.
 _KNOWN_CITIES = [
     "Vancouver", "Burnaby", "Surrey", "Richmond", "New Westminster",
     "North Vancouver", "West Vancouver", "Coquitlam", "Port Coquitlam",
