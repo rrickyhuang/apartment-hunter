@@ -47,7 +47,7 @@ EMAIL_TEMPLATE = Template("""\
 {% for row in tier_rows %}
   <div style="border:1px solid #ddd; border-radius:8px; padding:12px; margin:8px 0;">
     <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-      <h3 style="margin:0; font-size:15px;"><a href="http://localhost:5000/listing/{{ row['source'] }}/{{ row['external_id'] }}" style="color:#1d4ed8; text-decoration:none;">{{ row['title'] }}</a></h3>
+      <h3 style="margin:0; font-size:15px;"><a href="{{ row['url'] }}" style="color:#1d4ed8; text-decoration:none;">{{ row['title'] }}</a></h3>
       <span style="background:{{ score_color(row['score']) }}; color:white; padding:3px 9px; border-radius:999px; font-size:13px; font-weight:700; white-space:nowrap; margin-left:8px;">
         {{ '%.0f'|format(row['score']) }}
       </span>
