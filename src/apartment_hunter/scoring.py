@@ -41,8 +41,12 @@ def passes_hard_filters(listing: Listing, c: Criteria) -> tuple[bool, str]:
         return False, f"price ${listing.price} > max ${hf['max_rent']}"
     if "min_rent" in hf and listing.price < hf["min_rent"]:
         return False, f"price ${listing.price} < min ${hf['min_rent']}"
-    if "min_beds" in hf and listing.beds is not None and listing.beds < hf["min_beds"]:
-        return False, f"beds {listing.beds} < min {hf['min_beds']}"
+    min_beds = hf.get("min_beds")
+    if min_beds:
+        if listing.beds is None:
+            return False, f"beds unknown, required >= {min_beds}"
+        if listing.beds < min_beds:
+            return False, f"beds {listing.beds} < min {min_beds}"
     if hf.get("cities") and listing.city:
         allowed = {x.lower() for x in hf["cities"]}
         if listing.city.lower() not in allowed:
