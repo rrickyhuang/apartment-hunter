@@ -21,7 +21,9 @@ class Criteria:
     def load(cls, path: Path | str) -> "Criteria":
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
-        weights = data["weights"]
+        weights = data.get("weights")
+        if weights is None:
+            raise ValueError("criteria.yaml missing required 'weights' section")
         total = sum(weights.values())
         if abs(total - 1.0) > 0.001:
             raise ValueError(f"weights must sum to 1.0, got {total}")
