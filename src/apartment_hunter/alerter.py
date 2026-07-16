@@ -5,7 +5,16 @@ import smtplib
 import sqlite3
 from email.message import EmailMessage
 
-from jinja2 import Template
+from jinja2 import Environment, BaseLoader, select_autoescape
+
+
+def _email_env() -> Environment:
+    """Create a Jinja2 Environment with HTML autoescape enabled."""
+    return Environment(
+        loader=BaseLoader(),
+        autoescape=select_autoescape(["html"]),
+    )
+
 
 from .settings import Settings
 
@@ -38,7 +47,9 @@ def _group_by_tier(rows):
     return [(label, tier_rows) for label, tier_rows in tiers if tier_rows]
 
 
-EMAIL_TEMPLATE = Template("""\
+_EMAIL_ENV = _email_env()
+
+EMAIL_TEMPLATE = _EMAIL_ENV.from_string("""\\
 <html><body style="font-family: -apple-system, Segoe UI, sans-serif; max-width:640px; margin:auto;">
 <h2>{{ count }} new apartment match{{ 's' if count != 1 else '' }}</h2>
 <p style="color:#666">Score threshold: {{ threshold }}</p>
