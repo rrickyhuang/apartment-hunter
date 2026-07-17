@@ -44,7 +44,3 @@ def _with_retry(method, url, **kwargs):
 
 def get(url: str, params: dict | None = None, **kwargs):
     return _with_retry(cc_requests.get, url, params=params, **kwargs)
-
-
-def post(url: str, json: dict | None = None, **kwargs):
-    return _with_retry(cc_requests.post, url, json=json, **kwargs)
