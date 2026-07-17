@@ -38,17 +38,9 @@
     return '#' + [r, g, b].map(x => Math.round(x).toString(16).padStart(2, '0')).join('');
   }
 
-  // Stroke color mirrors the status-pill palette from base.html
-  const STATUS_COLOR = {
-    new:        '#9ca3af',
-    interested: '#3b82f6',
-    contacted:  '#f59e0b',
-    viewing:    '#d97706',
-    applied:    '#6366f1',
-    accepted:   '#10b981',
-    rejected:   '#ef4444',
-    not_interested: '#d1d5db',
-  };
+  // Canonical status→color mapping — emitted from db.STATUS_COLORS
+  // so the map markers and list-view pills always show the same palette.
+  const STATUS_COLOR = {{ STATUS_COLORS | tojson }};
   function statusStroke(status) {
     return STATUS_COLOR[status] || '#9ca3af';
   }

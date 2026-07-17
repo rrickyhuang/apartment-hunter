@@ -498,8 +498,11 @@ def create_app(db_path: Path | str = DEFAULT_DB) -> Flask:
         return render_template("_card_status.html", row=row, statuses=db.STATUSES)
 
     @app.context_processor
-    def inject_scrape_state():
-        return {"scrape_state": _scrape_view_state()}
+    def inject_globals():
+        return {
+            "scrape_state": _scrape_view_state(),
+            "STATUS_COLORS": db.STATUS_COLORS,
+        }
 
     @app.route("/scrape", methods=["POST"])
     def scrape_start():

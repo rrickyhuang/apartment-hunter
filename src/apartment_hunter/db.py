@@ -54,6 +54,19 @@ CREATE INDEX IF NOT EXISTS idx_starred ON listings(starred);
 """
 
 # Statuses the UI cycles through. Order matters — used for filter pills.
+# Canonical status→color mapping. Used by both CSS (base.html) and the
+# map JS (map.html) so the two always stay in sync.
+STATUS_COLORS = {
+    "new":           "#e5e7eb",
+    "interested":    "#dbeafe",
+    "contacted":     "#fef3c7",
+    "viewing":       "#fde68a",
+    "applied":       "#c7d2fe",
+    "accepted":      "#d1fae5",
+    "rejected":      "#fee2e2",
+    "not_interested":"#f3f4f6",
+}
+
 STATUSES = [
     "new", "interested", "contacted", "viewing",
     "applied", "accepted", "rejected", "not_interested",
