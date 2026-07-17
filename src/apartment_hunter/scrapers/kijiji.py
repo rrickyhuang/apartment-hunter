@@ -16,20 +16,11 @@ from bs4 import BeautifulSoup
 
 from ..http_client import get as http_get
 from ..models import Listing
-from .base import Scraper
+from .base import JUNK_PATTERNS, Scraper
 
 log = logging.getLogger(__name__)
 
 BEDS_RE = re.compile(r"(\d+(?:\.\d)?)")
-
-# Same junk filter as craigslist — drop short-term / room-share / sublet noise.
-JUNK_PATTERNS = re.compile(
-    r"\b(short[\s-]?term|short[\s-]?stay|weekly|nightly|per night|"
-    r"vacation|airbnb|sublet|sublease|roommate|room ?mate|room for rent|"
-    r"room available|co[\s-]?living|shared (room|bathroom|kitchen|accommodation)|"
-    r"furnished room|private room)\b",
-    re.I,
-)
 
 # Kijiji location category IDs (verified by probing search results):
 #   80003   = Greater Vancouver (covers Surrey, Delta, Langley, Burnaby, ...)
@@ -38,7 +29,6 @@ JUNK_PATTERNS = re.compile(
 # kijiji.ca and reading the `l<number>` segment in the URL.
 GREATER_VANCOUVER_ID = 80003
 GREATER_VANCOUVER_SLUG = "greater-vancouver"
-
 
 class KijijiScraper(Scraper):
     source = "kijiji"
@@ -169,7 +159,6 @@ class KijijiScraper(Scraper):
             raw={"id": ext_id, "title": title, "price": price, "location": location},
         )
 
-
 # Vancouver metro by default. Update this list to match your search region so
 # that the city field is populated correctly on scraped listings.
 _KNOWN_CITIES = [
@@ -177,7 +166,6 @@ _KNOWN_CITIES = [
     "North Vancouver", "West Vancouver", "Coquitlam", "Port Coquitlam",
     "Port Moody", "Delta", "Langley", "Maple Ridge", "White Rock",
 ]
-
 
 def _guess_city(location: str | None) -> str | None:
     if not location:
