@@ -8,22 +8,13 @@ from bs4 import BeautifulSoup
 
 from ..http_client import get as http_get
 from ..models import Listing
-from .base import Scraper
+from .base import JUNK_PATTERNS, Scraper
 
 log = logging.getLogger(__name__)
 
 BEDS_RE = re.compile(r"(\d+(?:\.\d)?)\s*(?:br|bed)", re.I)
 SQFT_RE = re.compile(r"(\d{3,5})\s*(?:ft²|ft2|sqft|sq\.?\s*ft)", re.I)
 POST_ID_RE = re.compile(r"/(\d{8,12})\.html")
-
-# Craigslist is high-noise. Drop listings whose title screams short-term /
-# vacation / sublet / room-rental.
-JUNK_PATTERNS = re.compile(
-    r"\b(short[\s-]?term|short[\s-]?stay|weekly|nightly|per night|monthly only|"
-    r"vacation|airbnb|sublet|sublease|roommate|room ?mate|room for rent|"
-    r"shared (room|bathroom|kitchen)|furnished room|private room)\b",
-    re.I,
-)
 
 
 class CraigslistScraper(Scraper):
